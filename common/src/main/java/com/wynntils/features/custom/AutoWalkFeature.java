@@ -7,7 +7,7 @@ import com.wynntils.core.keybinds.KeyBind;
 import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.mc.event.TickEvent;
-import com.wynntils.models.mobtotem.MobTotem;
+import com.wynntils.models.abilities.type.ShamanTotem;
 import com.wynntils.utils.mc.McUtils;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -86,7 +86,7 @@ public class AutoWalkFeature extends Feature {
         }
     }
     public Vec3 getCenter() {
-        List<MobTotem> totems = Models.MobTotem.getMobTotems();
+        List<ShamanTotem> totems = Models.ShamanTotem.getActiveTotems();
         if (totems.isEmpty()) {
             return lastPosition;
         }
@@ -95,7 +95,7 @@ public class AutoWalkFeature extends Feature {
         double sumY = 0;
         double sumZ = 0;
 
-        for (MobTotem totem : totems) {
+        for (ShamanTotem totem : totems) {
             sumX += totem.getPosition().x();
             sumY += totem.getPosition().y();
             sumZ += totem.getPosition().z();
