@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays;
@@ -20,7 +20,7 @@ import com.wynntils.models.players.event.HadesRelationsUpdateEvent;
 import com.wynntils.models.players.event.PartyEvent;
 import com.wynntils.models.players.scoreboard.PartyScoreboardPart;
 import com.wynntils.services.hades.HadesUser;
-import com.wynntils.services.hades.event.HadesUserAddedEvent;
+import com.wynntils.services.hades.event.HadesUserEvent;
 import com.wynntils.utils.colors.CommonColors;
 import com.wynntils.utils.mc.SkinUtils;
 import com.wynntils.utils.render.Texture;
@@ -36,6 +36,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.EventPriority;
@@ -48,16 +49,19 @@ public class PartyMembersOverlay extends ContainerOverlay<PartyMembersOverlay.Pa
             new HadesUser("Player 2", new CappedValue(4561, 9870), new CappedValue(98, 170));
 
     @Persisted
-    public final Config<Boolean> disablePartyMembersOnScoreboard = new Config<>(false);
+    private final Config<Boolean> disablePartyMembersOnScoreboard = new Config<>(false);
 
     @Persisted
-    public final Config<Integer> maxPartyMembers = new Config<>(4);
+    private final Config<Integer> maxPartyMembers = new Config<>(4);
 
     @Persisted
-    public final Config<HealthTexture> healthTexture = new Config<>(HealthTexture.A);
+    private final Config<Boolean> showHeads = new Config<>(true);
 
     @Persisted
-    public final Config<ManaTexture> manaTexture = new Config<>(ManaTexture.A);
+    private final Config<HealthTexture> healthTexture = new Config<>(HealthTexture.A);
+
+    @Persisted
+    private final Config<ManaTexture> manaTexture = new Config<>(ManaTexture.A);
 
     public PartyMembersOverlay() {
         super(
@@ -79,7 +83,12 @@ public class PartyMembersOverlay extends ContainerOverlay<PartyMembersOverlay.Pa
     }
 
     @SubscribeEvent
-    public void onHadesUserAdded(HadesUserAddedEvent event) {
+    public void onHadesUserAdded(HadesUserEvent.Added event) {
+        updateChildren();
+    }
+
+    @SubscribeEvent
+    public void onHadesUserRemoved(HadesUserEvent.Removed event) {
         updateChildren();
     }
 
@@ -176,23 +185,26 @@ public class PartyMembersOverlay extends ContainerOverlay<PartyMembersOverlay.Pa
 
         @Override
         public void render(
-                PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+                GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+            PoseStack poseStack = guiGraphics.pose();
             poseStack.pushPose();
-
-            ResourceLocation skin = SkinUtils.getSkin(hadesUser.getUuid());
 
             float renderX = getRenderX();
             float renderY = getRenderY();
 
             poseStack.translate(renderX, renderY, 0);
 
-            // head
-            BufferedRenderUtils.drawTexturedRect(
-                    poseStack, bufferSource, skin, 0, 0, 0, HEAD_SIZE, HEAD_SIZE, 8, 8, 8, 8, 64, 64);
+            if (showHeads.get()) {
+                ResourceLocation skin = SkinUtils.getSkin(hadesUser.getUuid());
 
-            // hat
-            BufferedRenderUtils.drawTexturedRect(
-                    poseStack, bufferSource, skin, 0, 0, 1, HEAD_SIZE, HEAD_SIZE, 40, 8, 8, 8, 64, 64);
+                // head
+                BufferedRenderUtils.drawTexturedRect(
+                        poseStack, bufferSource, skin, 0, 0, 0, HEAD_SIZE, HEAD_SIZE, 8, 8, 8, 8, 64, 64);
+
+                // hat
+                BufferedRenderUtils.drawTexturedRect(
+                        poseStack, bufferSource, skin, 0, 0, 1, HEAD_SIZE, HEAD_SIZE, 40, 8, 8, 8, 64, 64);
+            }
 
             poseStack.translate(HEAD_SIZE, 0, 0);
 
@@ -231,6 +243,22 @@ public class PartyMembersOverlay extends ContainerOverlay<PartyMembersOverlay.Pa
                     healthTexture.getTextureY2(),
                     (float) healthProgress);
 
+            if (healthProgress > 1) {
+                BufferedRenderUtils.drawProgressBar(
+                        poseStack,
+                        bufferSource,
+                        Texture.HEALTH_BAR_OVERFLOW,
+                        0,
+                        0,
+                        81 * 0.85f,
+                        healthTexture.getHeight() * 0.85f,
+                        0,
+                        healthTexture.getTextureY1(),
+                        81,
+                        healthTexture.getTextureY2(),
+                        (float) healthProgress - 1f);
+            }
+
             poseStack.translate(0, healthTexture.getHeight() * 0.85f, 0);
 
             // mana
@@ -251,8 +279,5 @@ public class PartyMembersOverlay extends ContainerOverlay<PartyMembersOverlay.Pa
 
             poseStack.popPose();
         }
-
-        @Override
-        protected void onConfigUpdate(Config<?> config) {}
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.minimap;
@@ -17,7 +17,9 @@ import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.features.map.MainMapFeature;
+import com.wynntils.services.hades.type.PlayerRelation;
 import com.wynntils.services.map.MapTexture;
+import com.wynntils.services.map.pois.PlayerMiniMapPoi;
 import com.wynntils.services.map.pois.Poi;
 import com.wynntils.services.map.pois.WaypointPoi;
 import com.wynntils.utils.MathUtils;
@@ -43,46 +45,50 @@ import java.util.List;
 import java.util.stream.Stream;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 
 public class MinimapOverlay extends Overlay {
     private static final int DEFAULT_SIZE = 130;
 
     @Persisted
-    public final Config<Float> zoomLevel = new Config<>(MapRenderer.DEFAULT_ZOOM_LEVEL);
+    private final Config<Float> zoomLevel = new Config<>(MapRenderer.DEFAULT_ZOOM_LEVEL);
 
     @Persisted
-    public final Config<Float> poiScale = new Config<>(0.6f);
+    private final Config<Float> poiScale = new Config<>(0.6f);
 
     @Persisted
-    public final Config<Float> pointerScale = new Config<>(0.8f);
+    private final Config<Float> pointerScale = new Config<>(0.8f);
 
     @Persisted
-    public final Config<Boolean> followPlayerRotation = new Config<>(true);
+    private final Config<Boolean> followPlayerRotation = new Config<>(true);
 
     @Persisted
     public final Config<UnmappedOption> hideWhenUnmapped = new Config<>(UnmappedOption.MINIMAP_AND_COORDS);
 
     @Persisted
-    public final Config<CustomColor> pointerColor = new Config<>(new CustomColor(1f, 1f, 1f, 1f));
+    private final Config<CustomColor> pointerColor = new Config<>(new CustomColor(1f, 1f, 1f, 1f));
 
     @Persisted
-    public final Config<MapMaskType> maskType = new Config<>(MapMaskType.RECTANGULAR);
+    private final Config<MapMaskType> maskType = new Config<>(MapMaskType.RECTANGULAR);
 
     @Persisted
-    public final Config<MapBorderType> borderType = new Config<>(MapBorderType.WYNN);
+    private final Config<MapBorderType> borderType = new Config<>(MapBorderType.WYNN);
 
     @Persisted
-    public final Config<PointerType> pointerType = new Config<>(PointerType.ARROW);
+    private final Config<PointerType> pointerType = new Config<>(PointerType.ARROW);
 
     @Persisted
-    public final Config<CompassRenderType> showCompass = new Config<>(CompassRenderType.ALL);
+    private final Config<CompassRenderType> showCompass = new Config<>(CompassRenderType.ALL);
 
     @Persisted
-    public final Config<Boolean> renderRemoteFriendPlayers = new Config<>(true);
+    private final Config<Boolean> renderRemoteFriendPlayers = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> renderRemotePartyPlayers = new Config<>(true);
+    private final Config<Boolean> renderRemotePartyPlayers = new Config<>(true);
+
+    @Persisted
+    private final Config<Boolean> renderRemoteGuildPlayers = new Config<>(true);
 
     @Persisted
     public final Config<Float> remotePlayersHeadScale = new Config<>(0.4f);
@@ -98,7 +104,7 @@ public class MinimapOverlay extends Overlay {
                 new OverlaySize(DEFAULT_SIZE, DEFAULT_SIZE));
     }
 
-    public void setZoomLevel(float level) {
+    private void setZoomLevel(float level) {
         // Clamp zoom levels to allowed interval
         float clampedLevel = MathUtils.clamp(level, 1, MapRenderer.ZOOM_LEVELS);
 
@@ -115,8 +121,9 @@ public class MinimapOverlay extends Overlay {
     // FIXME: This is the only overlay not to use buffer sources for rendering. This is due to `createMask`
     // currently not working with buffer sources.
     @Override
-    public void render(PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
-        if (!Models.WorldState.onWorld()) return;
+    public void render(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        PoseStack poseStack = guiGraphics.pose();
 
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
 
@@ -142,10 +149,12 @@ public class MinimapOverlay extends Overlay {
 
         // enable mask
         switch (maskType.get()) {
-            case RECTANGULAR -> RenderUtils.enableScissor((int) renderX, (int) renderY, (int) width, (int) height);
-            case CIRCLE -> RenderUtils.createMask(
-                    poseStack, Texture.CIRCLE_MASK, (int) renderX, (int) renderY, (int) (renderX + width), (int)
-                            (renderY + height));
+            case RECTANGULAR ->
+                RenderUtils.enableScissor(guiGraphics, (int) renderX, (int) renderY, (int) width, (int) height);
+            case CIRCLE ->
+                RenderUtils.createMask(
+                        poseStack, Texture.CIRCLE_MASK, (int) renderX, (int) renderY, (int) (renderX + width), (int)
+                                (renderY + height));
         }
 
         // Always draw a black background to cover transparent map areas
@@ -162,7 +171,7 @@ public class MinimapOverlay extends Overlay {
         }
 
         // avoid rotational overpass - This is a rather loose oversizing, if possible later
-        // use trignometry, etc. to find a better one
+        // use trigonometry, etc. to find a better one
         float extraFactor = 1f;
         if (followPlayerRotation.get()) {
             // 1.5 > sqrt(2);
@@ -219,7 +228,7 @@ public class MinimapOverlay extends Overlay {
 
         // disable mask & render border
         switch (maskType.get()) {
-            case RECTANGULAR -> RenderUtils.disableScissor();
+            case RECTANGULAR -> RenderUtils.disableScissor(guiGraphics);
             case CIRCLE -> RenderUtils.clearMask();
         }
 
@@ -264,7 +273,10 @@ public class MinimapOverlay extends Overlay {
         poisToRender = Stream.concat(poisToRender, Models.Marker.getAllPois());
         poisToRender = Stream.concat(
                 poisToRender,
-                Services.Hades.getMiniPlayerPois(renderRemotePartyPlayers.get(), renderRemoteFriendPlayers.get()));
+                getMiniPlayerPois(
+                        renderRemotePartyPlayers.get(),
+                        renderRemoteFriendPlayers.get(),
+                        renderRemoteGuildPlayers.get()));
 
         MultiBufferSource.BufferSource bufferSource =
                 McUtils.mc().renderBuffers().bufferSource();
@@ -421,6 +433,15 @@ public class MinimapOverlay extends Overlay {
 
             poseStack.popPose();
         }
+    }
+
+    private Stream<PlayerMiniMapPoi> getMiniPlayerPois(
+            boolean renderRemotePartyPlayers, boolean renderRemoteFriendPlayers, boolean renderRemoteGuildPlayers) {
+        return Services.Hades.getHadesUsers()
+                .filter(hadesUser -> (hadesUser.getRelation() == PlayerRelation.PARTY && renderRemotePartyPlayers)
+                        || (hadesUser.getRelation() == PlayerRelation.FRIEND && renderRemoteFriendPlayers)
+                        || (hadesUser.getRelation() == PlayerRelation.GUILD && renderRemoteGuildPlayers))
+                .map(PlayerMiniMapPoi::new);
     }
 
     private void renderCardinalDirections(

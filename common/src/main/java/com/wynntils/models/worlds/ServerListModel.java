@@ -1,9 +1,10 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.worlds;
 
+import com.google.common.collect.Streams;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.wynntils.core.WynntilsMod;
@@ -13,13 +14,14 @@ import com.wynntils.core.net.Download;
 import com.wynntils.core.net.UrlId;
 import com.wynntils.models.worlds.event.WorldStateEvent;
 import com.wynntils.models.worlds.profile.ServerProfile;
+import com.wynntils.models.worlds.type.ServerRegion;
 import com.wynntils.models.worlds.type.WorldState;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +30,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 public final class ServerListModel extends Model {
     private static final int SERVER_UPDATE_MS = 15000;
 
-    private static final List<String> SERVER_TYPES = List.of("WC", "lobby", "GM", "DEV", "WAR", "HB", "YT");
+    private static final List<String> SERVER_TYPES = List.of("lobby", "GM", "DEV", "WAR", "HB", "YT");
 
     private final ScheduledExecutorService timerExecutor = new ScheduledThreadPoolExecutor(1);
 
@@ -41,7 +43,8 @@ public final class ServerListModel extends Model {
     }
 
     public List<String> getWynnServerTypes() {
-        return SERVER_TYPES;
+        return Streams.concat(Arrays.stream(ServerRegion.values()).map(Enum::name), SERVER_TYPES.stream())
+                .toList();
     }
 
     public Set<String> getServers() {
@@ -85,9 +88,7 @@ public final class ServerListModel extends Model {
         updateServerList();
     }
 
-    private CompletableFuture<Boolean> updateServerList() {
-        CompletableFuture<Boolean> future = new CompletableFuture<>();
-
+    private void updateServerList() {
         // dataAthenaServerList is based on
         // https://api.wynncraft.com/public_api.php?action=onlinePlayers
         // but injects a firstSeen timestamp when the server was first noticed by Athena
@@ -116,8 +117,6 @@ public final class ServerListModel extends Model {
             }
 
             availableServers = newMap;
-            future.complete(true);
         });
-        return future;
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2024.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.territories.type;
@@ -7,6 +7,7 @@ package com.wynntils.models.territories.type;
 import net.minecraft.ChatFormatting;
 
 public enum GuildResourceValues {
+    NONE("None", ChatFormatting.WHITE, 0),
     VERY_LOW("Very Low", ChatFormatting.DARK_GREEN, 1),
     LOW("Low", ChatFormatting.GREEN, 2),
     MEDIUM("Medium", ChatFormatting.YELLOW, 3),
@@ -55,24 +56,37 @@ public enum GuildResourceValues {
     }
 
     public GuildResourceValues getFilterNext(boolean limited) {
+        // ordinal has 1 subtracted as we are using normalValues which has NONE removed
         if (limited) {
             // If is HIGH, go back to LOW since limited
-            return ordinal() == 3 ? values()[1] : values()[(ordinal() + 1) % values().length];
+            return (ordinal() - 1) == 3
+                    ? normalValues()[1]
+                    : normalValues()[((ordinal() - 1) + 1) % normalValues().length];
         } else {
-            return values()[(ordinal() + 1) % values().length];
+            return normalValues()[((ordinal() - 1) + 1) % normalValues().length];
         }
     }
 
     public GuildResourceValues getFilterPrevious(boolean limited) {
+        // ordinal has 1 subtracted as we are using normalValues which has NONE removed
         if (limited) {
             // If is LOW, go back to HIGH since limited
-            return ordinal() == 1 ? values()[3] : values()[(ordinal() + values().length - 1) % values().length];
+            return (ordinal() - 1) == 1
+                    ? normalValues()[3]
+                    : normalValues()[((ordinal() - 1) + normalValues().length - 1) % normalValues().length];
         } else {
-            return values()[(ordinal() + values().length - 1) % values().length];
+            return normalValues()[((ordinal() - 1) + normalValues().length - 1) % normalValues().length];
         }
     }
 
     public int getLevel() {
         return level;
+    }
+
+    // This should be used instead of values() in almost all places as the NONE value is only used for parsing
+    // the rare occasion when a territory has a None treasury, but in most scenarios where values is used we are
+    // only interested in these values
+    public static GuildResourceValues[] normalValues() {
+        return new GuildResourceValues[] {VERY_LOW, LOW, MEDIUM, HIGH, VERY_HIGH};
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils.type;
@@ -8,6 +8,15 @@ import com.google.common.collect.ComparisonChain;
 
 public record CappedValue(int current, int max) implements Comparable<CappedValue> {
     public static final CappedValue EMPTY = new CappedValue(0, 0);
+
+    public static CappedValue fromProgress(float progress, int max) {
+        if (max <= 0) {
+            return EMPTY;
+        }
+
+        int current = Math.round(progress * max);
+        return new CappedValue(current, max);
+    }
 
     public CappedValue withCurrent(int newCurrent) {
         return new CappedValue(newCurrent, max);
@@ -35,7 +44,7 @@ public record CappedValue(int current, int max) implements Comparable<CappedValu
 
     /** Return the current value as a proportion of max, in 0..1 */
     public double getProgress() {
-        // Treating emtpy capped values as 100% progress makes reasonable invariants
+        // Treating empty capped values as 100% progress makes reasonable invariants
         // with remaining and atCap hold.
         if (max == 0) return 1.0;
 

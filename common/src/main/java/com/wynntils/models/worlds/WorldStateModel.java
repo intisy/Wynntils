@@ -1,54 +1,74 @@
 /*
- * Copyright © Wynntils 2021-2024.
+ * Copyright © Wynntils 2021-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.worlds;
 
 import com.wynntils.core.WynntilsMod;
+import com.wynntils.core.components.Handlers;
 import com.wynntils.core.components.Model;
+import com.wynntils.core.components.Models;
 import com.wynntils.core.mod.event.WynncraftConnectionEvent;
 import com.wynntils.core.text.StyledText;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
-import com.wynntils.mc.event.MenuEvent;
+import com.wynntils.handlers.actionbar.event.ActionBarUpdatedEvent;
+import com.wynntils.mc.event.ContainerSetContentEvent;
 import com.wynntils.mc.event.PlayerInfoEvent.PlayerDisplayNameChangeEvent;
 import com.wynntils.mc.event.PlayerInfoEvent.PlayerLogOutEvent;
-import com.wynntils.mc.event.PlayerInfoFooterChangedEvent;
-import com.wynntils.mc.event.PlayerTeleportEvent;
+import com.wynntils.models.character.actionbar.segments.CharacterCreationSegment;
+import com.wynntils.models.character.actionbar.segments.CharacterSelectionSegment;
+import com.wynntils.models.worlds.actionbar.matchers.CharacterWardrobeSegmentMatcher;
+import com.wynntils.models.worlds.actionbar.matchers.WynncraftVersionSegmentMatcher;
+import com.wynntils.models.worlds.actionbar.segments.CharacterWardrobeSegment;
+import com.wynntils.models.worlds.actionbar.segments.WynncraftVersionSegment;
+import com.wynntils.models.worlds.bossbars.SkipCutsceneBar;
+import com.wynntils.models.worlds.bossbars.StreamerModeBar;
+import com.wynntils.models.worlds.event.CutsceneStartedEvent;
 import com.wynntils.models.worlds.event.StreamModeEvent;
 import com.wynntils.models.worlds.event.WorldStateEvent;
+import com.wynntils.models.worlds.type.CutsceneState;
+import com.wynntils.models.worlds.type.ServerRegion;
 import com.wynntils.models.worlds.type.WorldState;
-import com.wynntils.utils.mc.PosUtils;
+import com.wynntils.models.worlds.type.WynncraftVersion;
+import com.wynntils.utils.mc.McUtils;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import net.minecraft.core.Position;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.inventory.MenuType;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public final class WorldStateModel extends Model {
     private static final UUID WORLD_NAME_UUID = UUID.fromString("16ff7452-714f-2752-b3cd-c3cb2068f6af");
     private static final Pattern WORLD_NAME = Pattern.compile("^§f {2}§lGlobal \\[(.*)\\]$");
-    private static final Pattern HOUSING_NAME = Pattern.compile("^§f  §l([^§\"\\\\]{1,18})$");
+    private static final Pattern HOUSING_NAME = Pattern.compile("^§f  §l([^§\"\\\\]{1,35})$");
     private static final Pattern HUB_NAME = Pattern.compile("^\n§6§l play.wynncraft.com \n$");
-    private static final Pattern STREAMER_MESSAGE = Pattern.compile("§2Streamer mode (disabled|was enabled)\\.");
-    private static final Position CHARACTER_SELECTION_POSITION = new Vec3(-1337.5, 16.2, -1120.5);
+    private static final Pattern QUICK_CONNECT_PATTERN = Pattern.compile("§aQuick Connect");
     private static final String WYNNCRAFT_BETA_NAME = "beta";
-    private static final StyledText CHARACTER_SELECTION_TITLE = StyledText.fromString("§8§lSelect a Character");
+    private static final String UNKNOWN_WORLD = "WC??";
 
-    private StyledText currentTabListFooter = StyledText.EMPTY;
+    private static final SkipCutsceneBar skipCutsceneBar = new SkipCutsceneBar();
+    private CutsceneState cutsceneState = CutsceneState.NOT_IN_CUTSCENE;
+
+    private static final StreamerModeBar streamerModeBar = new StreamerModeBar();
+
     private String currentWorldName = "";
-    private String currentHousingName = "";
+    private ServerRegion currentRegion = ServerRegion.WC;
     private long serverJoinTimestamp = 0;
     private boolean onBetaServer;
     private boolean hasJoinedAnyWorld = false;
     private boolean inStream = false;
-    private boolean onHousing = false;
+    private boolean inCharacterWardrobe = false;
+    private WynncraftVersion worldVersion = null;
 
     public WorldStateModel() {
         super(List.of());
+
+        Handlers.ActionBar.registerSegment(new WynncraftVersionSegmentMatcher());
+        Handlers.ActionBar.registerSegment(new CharacterWardrobeSegmentMatcher());
+        Handlers.BossBar.registerBar(skipCutsceneBar);
+        Handlers.BossBar.registerBar(streamerModeBar);
     }
 
     private WorldState currentState = WorldState.NOT_CONNECTED;
@@ -57,8 +77,8 @@ public final class WorldStateModel extends Model {
         return currentState == WorldState.WORLD;
     }
 
-    public boolean onHousing() {
-        return onHousing;
+    public boolean inCharacterWardrobe() {
+        return inCharacterWardrobe;
     }
 
     public boolean isInStream() {
@@ -69,6 +89,10 @@ public final class WorldStateModel extends Model {
         return onBetaServer;
     }
 
+    public WynncraftVersion getWorldVersion() {
+        return worldVersion;
+    }
+
     public WorldState getCurrentState() {
         return currentState;
     }
@@ -76,10 +100,8 @@ public final class WorldStateModel extends Model {
     private void setState(WorldState newState, String newWorldName, boolean isFirstJoinWorld) {
         if (newState == currentState && newWorldName.equals(currentWorldName)) return;
 
-        // Streamer mode is always disabled upon changing world state
-        inStream = false;
-        WynntilsMod.postEvent(new StreamModeEvent(inStream));
-
+        WynntilsMod.info("Changing world state to " + newState);
+        cutsceneEnded();
         WorldState oldState = currentState;
         // Switch state before sending event
         currentState = newState;
@@ -87,6 +109,12 @@ public final class WorldStateModel extends Model {
         if (newState == WorldState.WORLD) {
             serverJoinTimestamp = System.currentTimeMillis();
         }
+
+        if (currentWorldName.length() >= 2) {
+            String region = currentWorldName.substring(0, 2);
+            currentRegion = ServerRegion.fromString(region);
+        }
+
         WynntilsMod.postEvent(new WorldStateEvent(newState, oldState, newWorldName, isFirstJoinWorld));
     }
 
@@ -100,7 +128,12 @@ public final class WorldStateModel extends Model {
     }
 
     @SubscribeEvent
-    public void connecting(WynncraftConnectionEvent.Connected e) {
+    public void connectionAborted(WynncraftConnectionEvent.ConnectingAborted e) {
+        setState(WorldState.NOT_CONNECTED);
+    }
+
+    @SubscribeEvent
+    public void connecting(WynncraftConnectionEvent.Connecting e) {
         if (currentState != WorldState.NOT_CONNECTED) {
             WynntilsMod.error("Got connected event while already connected to server: " + e.getHost());
             currentState = WorldState.NOT_CONNECTED;
@@ -110,7 +143,17 @@ public final class WorldStateModel extends Model {
         String host = e.getHost();
         onBetaServer = host.equals(WYNNCRAFT_BETA_NAME);
         setState(WorldState.CONNECTING);
-        currentTabListFooter = StyledText.EMPTY;
+    }
+
+    @SubscribeEvent
+    public void connected(WynncraftConnectionEvent.Connected e) {
+        if (currentState != WorldState.CONNECTING) {
+            WynntilsMod.error("Got connected event without getting connecting event to server: " + e.getHost());
+            currentState = WorldState.CONNECTING;
+            currentWorldName = "";
+        }
+
+        setState(WorldState.INTERIM);
     }
 
     @SubscribeEvent
@@ -121,47 +164,46 @@ public final class WorldStateModel extends Model {
     }
 
     @SubscribeEvent
-    public void onChatReceived(ChatMessageReceivedEvent e) {
-        Matcher matcher = e.getStyledText().getMatcher(STREAMER_MESSAGE);
-
-        if (matcher.matches()) {
-            inStream = matcher.group(1).equals("was enabled");
-            WynntilsMod.postEvent(new StreamModeEvent(inStream));
-        }
+    public void onActionBarUpdate(ActionBarUpdatedEvent event) {
+        event.runIfPresent(CharacterCreationSegment.class, this::onCharacterCreation);
+        event.runIfPresent(CharacterSelectionSegment.class, this::onCharacterSelection);
+        event.runIfPresent(WynncraftVersionSegment.class, this::setWorldVersion);
+        inCharacterWardrobe = false;
+        event.runIfPresent(CharacterWardrobeSegment.class, this::onCharacterWardrobe);
     }
 
     @SubscribeEvent
-    public void onTeleport(PlayerTeleportEvent e) {
-        if (PosUtils.isSame(e.getNewPosition(), CHARACTER_SELECTION_POSITION)) {
-            // We get here even if the character selection menu will not show up because of autojoin
-            if (getCurrentState() != WorldState.CHARACTER_SELECTION) {
-                // Sometimes the TP comes after the character selection menu, instead of before
-                // Don't lose the CHARACTER_SELECTION state if that is the case
-                setState(WorldState.INTERIM);
-            }
-        }
-    }
+    public void onContainerSetEvent(ContainerSetContentEvent.Post e) {
+        if (e.getContainerId() != McUtils.inventoryMenu().containerId) return;
+        ItemStack firstHotbarSlot = e.getItems().get(36);
 
-    @SubscribeEvent
-    public void onMenuOpened(MenuEvent.MenuOpenedEvent.Pre e) {
-        if (e.getMenuType() == MenuType.GENERIC_9x3
-                && StyledText.fromComponent(e.getTitle()).equals(CHARACTER_SELECTION_TITLE)) {
-            setState(WorldState.CHARACTER_SELECTION);
-        }
-    }
-
-    @SubscribeEvent
-    public void onTabListFooter(PlayerInfoFooterChangedEvent e) {
-        StyledText footer = e.getFooter();
-        if (footer.equals(currentTabListFooter)) return;
-
-        currentTabListFooter = footer;
-
-        if (!footer.isEmpty()) {
-            if (footer.getMatcher(HUB_NAME).find()) {
+        if (firstHotbarSlot.getItem().equals(Items.COMPASS)) {
+            StyledText name = StyledText.fromComponent(firstHotbarSlot.getHoverName());
+            if (name.matches(QUICK_CONNECT_PATTERN)) {
                 setState(WorldState.HUB);
+                return;
             }
         }
+
+        if (currentState == WorldState.HUB) {
+            setState(WorldState.INTERIM);
+        }
+    }
+
+    private void onCharacterCreation(CharacterCreationSegment segment) {
+        setState(WorldState.CHARACTER_SELECTION);
+    }
+
+    private void onCharacterSelection(CharacterSelectionSegment segment) {
+        setState(WorldState.CHARACTER_SELECTION);
+    }
+
+    private void setWorldVersion(WynncraftVersionSegment segment) {
+        worldVersion = segment.getWynncraftVersion();
+    }
+
+    private void onCharacterWardrobe(CharacterWardrobeSegment segment) {
+        inCharacterWardrobe = true;
     }
 
     @SubscribeEvent
@@ -182,24 +224,49 @@ public final class WorldStateModel extends Model {
     private boolean setWorldIfMatched(Matcher m, boolean housing) {
         if (m.find()) {
             String worldName = housing ? currentWorldName : m.group(1);
+            if (worldName.isEmpty() && housing) {
+                worldName = UNKNOWN_WORLD;
+                WynntilsMod.warn("Changed world via housing join, current world name is unknown");
+            }
             setState(WorldState.WORLD, worldName, !hasJoinedAnyWorld);
             hasJoinedAnyWorld = true;
-            onHousing = housing;
-            currentHousingName = onHousing ? m.group(1) : "";
+            Models.Housing.updateHousingState(housing, housing ? m.group(1) : "");
             return true;
         }
         return false;
     }
 
+    public void setStreamerMode(boolean inStream) {
+        this.inStream = inStream;
+        WynntilsMod.postEvent(new StreamModeEvent(inStream));
+    }
+
+    public void cutsceneStarted(boolean groupCutscene) {
+        if (cutsceneState == CutsceneState.NOT_IN_CUTSCENE) {
+            cutsceneState = CutsceneState.IN_CUTSCENE;
+
+            CutsceneStartedEvent event = new CutsceneStartedEvent(groupCutscene);
+            WynntilsMod.postEvent(event);
+
+            if (event.isCanceled()) {
+                cutsceneState = CutsceneState.SKIPPED_CUTSCENE;
+            }
+        }
+    }
+
+    public void cutsceneEnded() {
+        cutsceneState = CutsceneState.NOT_IN_CUTSCENE;
+    }
+
     /**
-     * @return Full name of the current world, such as "WC32"
+     * @return Full name of the current world, such as "NA32"
      */
     public String getCurrentWorldName() {
         return currentWorldName;
     }
 
-    public String getCurrentHousingName() {
-        return currentHousingName;
+    public ServerRegion getCurrentServerRegion() {
+        return currentRegion;
     }
 
     public long getServerJoinTimestamp() {

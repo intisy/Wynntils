@@ -1,10 +1,11 @@
 /*
- * Copyright © Wynntils 2023.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.functions.generic;
 
 import com.wynntils.core.consumers.functions.GenericFunction;
+import com.wynntils.core.consumers.functions.arguments.Argument;
 import com.wynntils.core.consumers.functions.arguments.FunctionArguments;
 import com.wynntils.utils.type.NamedValue;
 import java.util.List;
@@ -19,20 +20,20 @@ public final class NamedFunctions {
         @Override
         public FunctionArguments.RequiredArgumentBuilder getRequiredArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("named", NamedValue.class, null)));
+                    List.of(new Argument<>("named", NamedValue.class, null)));
         }
     }
 
-    public static class ValueFunction extends GenericFunction<Integer> {
+    public static class ValueFunction extends GenericFunction<Double> {
         @Override
-        public Integer getValue(FunctionArguments arguments) {
+        public Double getValue(FunctionArguments arguments) {
             return arguments.getArgument("named").getNamedValue().value();
         }
 
         @Override
         public FunctionArguments.RequiredArgumentBuilder getRequiredArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("named", NamedValue.class, null)));
+                    List.of(new Argument<>("named", NamedValue.class, null)));
         }
 
         @Override
@@ -51,9 +52,8 @@ public final class NamedFunctions {
 
         @Override
         public FunctionArguments.RequiredArgumentBuilder getRequiredArgumentsBuilder() {
-            return new FunctionArguments.RequiredArgumentBuilder(List.of(
-                    new FunctionArguments.Argument<>("name", String.class, null),
-                    new FunctionArguments.Argument<>("value", Number.class, null)));
+            return new FunctionArguments.RequiredArgumentBuilder(
+                    List.of(new Argument<>("name", String.class, null), new Argument<>("value", Number.class, null)));
         }
 
         @Override

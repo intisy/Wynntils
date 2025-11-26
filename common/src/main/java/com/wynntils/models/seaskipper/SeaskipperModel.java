@@ -1,17 +1,15 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.seaskipper;
 
 import com.google.common.reflect.TypeToken;
 import com.wynntils.core.WynntilsMod;
-import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Model;
 import com.wynntils.core.components.Models;
-import com.wynntils.core.net.Download;
+import com.wynntils.core.net.DownloadRegistry;
 import com.wynntils.core.net.UrlId;
-import com.wynntils.core.text.StyledText;
 import com.wynntils.mc.event.ContainerSetContentEvent;
 import com.wynntils.mc.event.ScreenInitEvent;
 import com.wynntils.models.containers.containers.SeaskipperContainer;
@@ -22,6 +20,7 @@ import com.wynntils.screens.maps.CustomSeaskipperScreen;
 import com.wynntils.services.map.pois.SeaskipperDestinationPoi;
 import com.wynntils.utils.mc.McUtils;
 import com.wynntils.utils.wynn.ContainerUtils;
+import java.io.Reader;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +30,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
 
 public final class SeaskipperModel extends Model {
-    private static final StyledText OAK_BOAT_NAME = StyledText.fromString("§bOak Boat");
+    private static final String BOAT_NAME = "Boat";
 
     private List<SeaskipperDestination> allDestinations = new ArrayList<>();
     private List<SeaskipperDestination> availableDestinations = new ArrayList<>();
@@ -41,31 +40,29 @@ public final class SeaskipperModel extends Model {
 
     public SeaskipperModel() {
         super(List.of());
-
-        reloadData();
     }
 
     @Override
-    public void reloadData() {
-        loadSeaskipperPois();
+    public void registerDownloads(DownloadRegistry registry) {
+        registry.registerDownload(UrlId.DATA_STATIC_SEASKIPPER_DESTINATIONS).handleReader(this::handleSeaskipperPois);
     }
 
     @SubscribeEvent
-    public void onScreenInit(ScreenInitEvent e) {
+    public void onScreenInit(ScreenInitEvent.Pre e) {
         if (!(Models.Container.getCurrentContainer() instanceof SeaskipperContainer seaskipperContainer)) return;
 
         containerId = seaskipperContainer.getContainerId();
-        availableDestinations = new ArrayList<>();
     }
 
     @SubscribeEvent
     public void onContainerSetContent(ContainerSetContentEvent.Post event) {
         if (event.getContainerId() != containerId) return;
+        availableDestinations = new ArrayList<>();
 
         for (int i = 0; i < event.getItems().size(); i++) {
             ItemStack item = event.getItems().get(i);
 
-            if (boatSlot == -1 && StyledText.fromComponent(item.getHoverName()).equals(OAK_BOAT_NAME)) {
+            if (item.getHoverName().getString().equals(BOAT_NAME)) {
                 boatSlot = i;
                 continue;
             }
@@ -92,7 +89,7 @@ public final class SeaskipperModel extends Model {
         }
 
         // Reload the map
-        if (McUtils.mc().screen instanceof CustomSeaskipperScreen customSeaskipperScreen) {
+        if (McUtils.screen() instanceof CustomSeaskipperScreen customSeaskipperScreen) {
             customSeaskipperScreen.reloadDestinationPois();
         }
     }
@@ -147,16 +144,12 @@ public final class SeaskipperModel extends Model {
         return !allDestinations.isEmpty();
     }
 
-    private void loadSeaskipperPois() {
-        Download dl = Managers.Net.download(UrlId.DATA_STATIC_SEASKIPPER_DESTINATIONS);
+    private void handleSeaskipperPois(Reader reader) {
+        Type type = new TypeToken<ArrayList<SeaskipperDestinationProfile>>() {}.getType();
+        List<SeaskipperDestinationProfile> profiles = WynntilsMod.GSON.fromJson(reader, type);
 
-        dl.handleReader(reader -> {
-            Type type = new TypeToken<ArrayList<SeaskipperDestinationProfile>>() {}.getType();
-            List<SeaskipperDestinationProfile> profiles = WynntilsMod.GSON.fromJson(reader, type);
-
-            allDestinations = profiles.stream()
-                    .map(profile -> new SeaskipperDestination(profile, null, -1))
-                    .toList();
-        });
+        allDestinations = profiles.stream()
+                .map(profile -> new SeaskipperDestination(profile, null, -1))
+                .toList();
     }
 }

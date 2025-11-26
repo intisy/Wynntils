@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.settings.widgets;
@@ -16,8 +16,7 @@ public class EnumSettingsButton<E extends Enum<E>> extends GeneralSettingsButton
     private final Config<E> config;
     private final List<E> enumConstants;
 
-    public EnumSettingsButton(
-            int x, int y, Config<E> config, int maskTopY, int maskBottomY, float translationX, float translationY) {
+    public EnumSettingsButton(int x, int y, Config<E> config, int maskTopY, int maskBottomY) {
         super(
                 x,
                 y,
@@ -26,16 +25,14 @@ public class EnumSettingsButton<E extends Enum<E>> extends GeneralSettingsButton
                 Component.literal(config.getValueString()),
                 ComponentUtils.wrapTooltips(List.of(Component.literal(config.getDescription())), 150),
                 maskTopY,
-                maskBottomY,
-                translationX,
-                translationY);
+                maskBottomY);
         this.config = config;
         enumConstants = EnumSet.allOf((Class<E>) config.getType()).stream().toList();
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!clicked(mouseX, mouseY)) return false;
+        if (!isMouseOver(mouseX, mouseY)) return false;
 
         int addToIndex;
 

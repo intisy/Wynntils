@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2024.
+ * Copyright © Wynntils 2024-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.npcdialogue;
@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Pattern;
 import net.neoforged.bus.api.SubscribeEvent;
 
-public class NpcDialogueModel extends Model {
+public final class NpcDialogueModel extends Model {
     private static final Pattern NEW_QUEST_STARTED = Pattern.compile("^§6§lNew Quest Started: §e§l(.*)$");
 
     private final Set<Feature> dialogExtractionDependents = new HashSet<>();
@@ -31,7 +31,7 @@ public class NpcDialogueModel extends Model {
     private NpcDialogue currentDialogue = NpcDialogue.EMPTY;
 
     // If we translate a confirmationless dialogue, then we need to change this list.
-    // However, translation is ran as a futrue, so it is not guranteed that only one thread will access this list at a
+    // However, translation is ran as a future, so it is not guaranteed that only one thread will access this list at a
     // time.
     private ConcurrentLinkedQueue<NpcDialogue> confirmationlessDialogues = new ConcurrentLinkedQueue<>();
 
@@ -84,8 +84,8 @@ public class NpcDialogueModel extends Model {
 
     public void handleDialogue(List<StyledText> chatMessage, boolean protectedDialogue, NpcDialogueType type) {
         // Print dialogue to the system log
-        WynntilsMod.info("[NPC] Type: " + (chatMessage.isEmpty() ? "<empty> " : "")
-                + (protectedDialogue ? "<protected> " : "") + type);
+        WynntilsMod.info("[NPC] Type: " + type + (protectedDialogue ? " <protected>" : " <not protected>")
+                + (chatMessage.isEmpty() ? " <empty>" : ""));
         chatMessage.forEach(s -> WynntilsMod.info("[NPC] " + (s.isEmpty() ? "<empty>" : s)));
 
         // The same message can be repeating before we have finished removing the old

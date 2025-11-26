@@ -1,4 +1,4 @@
-name: Spotless and Build
+name: Spotless, Build and Test
 
 on:
   workflow_dispatch:
@@ -32,13 +32,17 @@ jobs:
           path: .gradle
           key: ${{ runner.os }}-gradle--${{ hashFiles('**/settings.gradle', '**/gradle.properties') }}
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Format with spotless
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          arguments: spotlessApply
+        run: ./gradlew spotlessApply
 
       - name: Delete empty files
         run: find $(git ls-files -m) -size 0 -delete
+
+      - name: Run remove_unused_i18n.sh
+        run: bash utils/remove_unused_i18n.sh
 
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -47,11 +51,14 @@ jobs:
           commit_message: 'ci: spotless formatting'
 
       - name: Build with Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          arguments: buildDependents -x spotlessCheck -x test
+        run: ./gradlew buildDependents -x spotlessCheck -x test
 
       - name: Test with Gradle
-        uses: gradle/actions/setup-gradle@v3
+        run: ./gradlew test -x spotlessCheck --stacktrace --info
+
+      - name: Upload test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
         with:
-          arguments: test -x spotlessCheck
+          name: test-report
+          path: fabric/build/reports/tests/test/**

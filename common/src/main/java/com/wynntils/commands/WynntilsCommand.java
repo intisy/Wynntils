@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.commands;
@@ -14,9 +14,13 @@ import com.wynntils.core.components.Services;
 import com.wynntils.core.consumers.commands.Command;
 import com.wynntils.core.net.ApiResponse;
 import com.wynntils.core.net.UrlId;
-import com.wynntils.screens.base.WynntilsMenuScreenBase;
+import com.wynntils.screens.downloads.DownloadScreen;
+import com.wynntils.screens.maps.GuildMapScreen;
+import com.wynntils.screens.maps.MainMapScreen;
+import com.wynntils.screens.playerviewer.GearSharingSettingsScreen;
+import com.wynntils.screens.secrets.SecretsScreen;
 import com.wynntils.screens.wynntilsmenu.WynntilsMenuScreen;
-import com.wynntils.services.athena.UpdateService;
+import com.wynntils.services.athena.type.UpdateResult;
 import com.wynntils.utils.FileUtils;
 import com.wynntils.utils.mc.McUtils;
 import java.io.BufferedReader;
@@ -30,6 +34,7 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -78,11 +83,16 @@ public class WynntilsCommand extends Command {
                                 .then(Commands.literal("showOverlays").executes(this::profileShowOverlays))))
                 .then(Commands.literal("discord").executes(this::discordLink))
                 .then(Commands.literal("donate").executes(this::donateLink))
+                .then(Commands.literal("downloads").executes(this::downloads))
+                .then(Commands.literal("gearsharing").executes(this::openGearSharingSettings))
+                .then(Commands.literal("guildmap").executes(this::openGuildMap))
                 .then(Commands.literal("help").executes(this::help))
-                .then(Commands.literal("menu").executes(this::menu))
+                .then(Commands.literal("map").executes(this::openMap))
+                .then(Commands.literal("menu").executes(this::openMenu))
                 .then(Commands.literal("reauth").executes(this::reauth))
                 .then(Commands.literal("reloadcaches").executes(this::reloadCaches))
                 .then(Commands.literal("rescan").executes(this::rescan))
+                .then(Commands.literal("secrets").executes(this::secrets))
                 .then(Commands.literal("status").executes(this::status))
                 .then(Commands.literal("token").executes(this::token))
                 .then(Commands.literal("update").executes(this::update))
@@ -163,10 +173,15 @@ public class WynntilsCommand extends Command {
                         false);
 
         Services.Hades.tryDisconnect();
-        Services.WynntilsAccount.reauth();
+        Services.WynntilsAccount.reloadData();
         Models.Player.reset();
         // No need to try to re-connect to Hades, we will do that automatically when we get the new token
 
+        return 1;
+    }
+
+    private int openGearSharingSettings(CommandContext<CommandSourceStack> commandSourceStackCommandContext) {
+        Managers.TickScheduler.scheduleNextTick(() -> McUtils.setScreen(GearSharingSettingsScreen.create(null)));
         return 1;
     }
 
@@ -214,9 +229,15 @@ public class WynntilsCommand extends Command {
                                 .withStyle(ChatFormatting.YELLOW),
                         false);
 
-        // Reload all downloaded data
-        WynntilsMod.reloadAllComponentData();
+        // This reloads all URLs, and will then trigger a re-download
+        // in both DownloadManager and dynamically downloaded data (CoreComponent#reloadData)
+        Managers.Url.loadUrls();
 
+        return 1;
+    }
+
+    private int downloads(CommandContext<CommandSourceStack> context) {
+        Managers.TickScheduler.scheduleNextTick(() -> McUtils.setScreen(DownloadScreen.create(null, null)));
         return 1;
     }
 
@@ -355,7 +376,7 @@ public class WynntilsCommand extends Command {
 
         CompletableFuture.runAsync(() -> {
             WynntilsMod.info("Attempting to fetch Wynntils update.");
-            CompletableFuture<UpdateService.UpdateResult> completableFuture = Services.Update.tryUpdate();
+            CompletableFuture<UpdateResult> completableFuture = Services.Update.tryUpdate();
 
             completableFuture.whenComplete((result, throwable) -> McUtils.sendMessageToClient(result.getMessage()));
         });
@@ -369,14 +390,31 @@ public class WynntilsCommand extends Command {
         return 1;
     }
 
-    private int menu(CommandContext<CommandSourceStack> context) {
-        // Delay is needed to prevent chat screen overwriting the menu screen
-        Managers.TickScheduler.scheduleLater(() -> WynntilsMenuScreenBase.openBook(WynntilsMenuScreen.create()), 2);
+    private int secrets(CommandContext<CommandSourceStack> context) {
+        return openScreen(SecretsScreen.create());
+    }
+
+    private int openGuildMap(CommandContext<CommandSourceStack> context) {
+        return openScreen(GuildMapScreen.create());
+    }
+
+    private int openMap(CommandContext<CommandSourceStack> context) {
+        return openScreen(MainMapScreen.create());
+    }
+
+    private int openMenu(CommandContext<CommandSourceStack> context) {
+        return openScreen(WynntilsMenuScreen.create());
+    }
+
+    private int openScreen(Screen screenToOpen) {
+        // Delay is needed to prevent chat screen overwriting the new screen
+        Managers.TickScheduler.scheduleLater(() -> McUtils.setScreen(screenToOpen), 2);
         return 1;
     }
 
     private int rescan(CommandContext<CommandSourceStack> context) {
-        Models.Character.scanCharacterInfo(true);
+        Models.Character.scanCharacterInfo();
+        Models.Account.scanRankInfo(true);
         return 1;
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.chat;
@@ -12,7 +12,8 @@ import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.core.text.StyledTextPart;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
+import com.wynntils.core.text.type.StyleType;
+import com.wynntils.handlers.chat.event.ChatMessageEvent;
 import com.wynntils.handlers.chat.type.RecipientType;
 import com.wynntils.utils.colors.ColorChatFormatting;
 import com.wynntils.utils.mc.McUtils;
@@ -29,24 +30,24 @@ import net.neoforged.bus.api.SubscribeEvent;
 
 @ConfigCategory(Category.CHAT)
 public class ChatMentionFeature extends Feature {
-    private static final Pattern END_OF_HEADER_PATTERN = Pattern.compile(".*[\\]:]\\s?");
+    private static final Pattern END_OF_HEADER_PATTERN = Pattern.compile(".*:\\s?");
     private static final Pattern NON_WORD_CHARACTERS =
             Pattern.compile("\\W"); // all non-alphanumeric-underscore characters
 
     @Persisted
-    public final Config<Boolean> markMention = new Config<>(true);
+    private final Config<Boolean> markMention = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> dingMention = new Config<>(true);
+    private final Config<Boolean> dingMention = new Config<>(true);
 
     @Persisted
-    public final Config<ColorChatFormatting> mentionColor = new Config<>(ColorChatFormatting.YELLOW);
+    private final Config<ColorChatFormatting> mentionColor = new Config<>(ColorChatFormatting.YELLOW);
 
     @Persisted
-    public final Config<String> aliases = new Config<>("");
+    private final Config<String> aliases = new Config<>("");
 
     @Persisted
-    public final Config<Boolean> suppressMentionsInInfo = new Config<>(false);
+    private final Config<Boolean> suppressMentionsInInfo = new Config<>(false);
 
     private List<Pattern> mentionPatterns;
 
@@ -85,25 +86,25 @@ public class ChatMentionFeature extends Feature {
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)
-    public void onChat(ChatMessageReceivedEvent e) {
+    public void onChat(ChatMessageEvent.Edit e) {
         if (e.getRecipientType() == RecipientType.INFO && suppressMentionsInInfo.get()) return;
 
-        StyledText styledText = e.getStyledText();
-        StyledText modified = styledText.iterateBackwards((part, changes) -> {
+        StyledText message = e.getMessage();
+        StyledText modified = message.iterateBackwards((part, changes) -> {
             // We have reached the end of the message content,
             // we don't want to highlight our own name in our own message
             if (END_OF_HEADER_PATTERN
-                    .matcher(part.getString(null, PartStyle.StyleType.NONE))
+                    .matcher(part.getString(null, StyleType.NONE))
                     .matches()) {
                 return IterationDecision.BREAK;
             }
 
             StyledTextPart partToReplace = part;
             for (Pattern pattern : mentionPatterns) {
-                Matcher matcher = pattern.matcher(partToReplace.getString(null, PartStyle.StyleType.NONE));
+                Matcher matcher = pattern.matcher(partToReplace.getString(null, StyleType.NONE));
 
                 while (matcher.find()) {
-                    String match = partToReplace.getString(null, PartStyle.StyleType.NONE);
+                    String match = partToReplace.getString(null, StyleType.NONE);
 
                     String firstPart = match.substring(0, matcher.start());
                     String mentionPart = match.substring(matcher.start(), matcher.end());
@@ -133,7 +134,7 @@ public class ChatMentionFeature extends Feature {
         });
 
         // No changes were made, there was no mention.
-        if (styledText.equals(modified)) return;
+        if (message.equals(modified)) return;
 
         if (markMention.get()) {
             e.setMessage(modified);

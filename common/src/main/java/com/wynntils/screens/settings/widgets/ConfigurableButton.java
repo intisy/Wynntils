@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.settings.widgets;
@@ -37,6 +37,7 @@ public class ConfigurableButton extends WynntilsButton {
     private final int maskBottomY;
     private final int matchingConfigs;
     private final List<Component> descriptionTooltip;
+    private final List<Component> toggleTooltip;
     private final WynntilsBookSettingsScreen settingsScreen;
 
     public ConfigurableButton(
@@ -54,8 +55,16 @@ public class ConfigurableButton extends WynntilsButton {
         if (configurable instanceof Feature feature) {
             descriptionTooltip =
                     ComponentUtils.wrapTooltips(List.of(Component.literal(feature.getTranslatedDescription())), 150);
+            toggleTooltip = ComponentUtils.wrapTooltips(
+                    List.of(Component.translatable(
+                            "screens.wynntils.settingsScreen.toggleFeature", configurable.getTranslatedName())),
+                    150);
         } else {
             descriptionTooltip = List.of();
+            toggleTooltip = ComponentUtils.wrapTooltips(
+                    List.of(Component.translatable(
+                            "screens.wynntils.settingsScreen.toggleOverlay", configurable.getTranslatedName())),
+                    150);
         }
 
         boolean enabled = false;
@@ -83,7 +92,7 @@ public class ConfigurableButton extends WynntilsButton {
 
         CustomColor color = isHovered ? CommonColors.YELLOW : CommonColors.WHITE;
 
-        if (McUtils.mc().screen instanceof WynntilsBookSettingsScreen bookSettingsScreen) {
+        if (McUtils.screen() instanceof WynntilsBookSettingsScreen bookSettingsScreen) {
             if (bookSettingsScreen.getSelectedConfigurable() == configurable) {
                 color = CommonColors.GRAY;
             }
@@ -118,10 +127,15 @@ public class ConfigurableButton extends WynntilsButton {
 
         enabledCheckbox.render(guiGraphics, mouseX, mouseY, partialTick);
 
-        if (isHovered && configurable instanceof Feature) {
-            McUtils.mc()
-                    .screen
-                    .setTooltipForNextRenderPass(Lists.transform(descriptionTooltip, Component::getVisualOrderText));
+        if (isHovered) {
+            if (enabledCheckbox.isHovered()) {
+                McUtils.screen()
+                        .setTooltipForNextRenderPass(Lists.transform(toggleTooltip, Component::getVisualOrderText));
+            } else if (configurable instanceof Feature) {
+                McUtils.screen()
+                        .setTooltipForNextRenderPass(
+                                Lists.transform(descriptionTooltip, Component::getVisualOrderText));
+            }
         }
     }
 
@@ -146,8 +160,9 @@ public class ConfigurableButton extends WynntilsButton {
             }
 
             // Repopulate screen to update new enabled/disabled states
-            if (McUtils.mc().screen instanceof WynntilsBookSettingsScreen bookSettingsScreen) {
+            if (McUtils.screen() instanceof WynntilsBookSettingsScreen bookSettingsScreen) {
                 bookSettingsScreen.populateConfigurables();
+                bookSettingsScreen.changesMade();
             }
 
             return enabledCheckbox.mouseClicked(mouseX, mouseY, button);
@@ -158,7 +173,7 @@ public class ConfigurableButton extends WynntilsButton {
 
     @Override
     public void onPress() {
-        if (McUtils.mc().screen instanceof WynntilsBookSettingsScreen bookSettingsScreen) {
+        if (McUtils.screen() instanceof WynntilsBookSettingsScreen bookSettingsScreen) {
             bookSettingsScreen.setSelectedConfigurable(configurable);
         }
     }
@@ -168,5 +183,9 @@ public class ConfigurableButton extends WynntilsButton {
         super.setY(y);
 
         enabledCheckbox.setY(y);
+    }
+
+    public Configurable getConfigurable() {
+        return configurable;
     }
 }

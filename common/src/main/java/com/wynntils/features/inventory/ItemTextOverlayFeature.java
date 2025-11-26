@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.inventory;
@@ -12,14 +12,16 @@ import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
+import com.wynntils.core.text.StyledText;
 import com.wynntils.mc.event.HotbarSlotRenderEvent;
 import com.wynntils.mc.event.SlotRenderEvent;
-import com.wynntils.models.dungeon.type.Dungeon;
+import com.wynntils.models.activities.type.Dungeon;
 import com.wynntils.models.elements.type.Skill;
 import com.wynntils.models.items.WynnItem;
 import com.wynntils.models.items.WynnItemData;
 import com.wynntils.models.items.items.game.AmplifierItem;
 import com.wynntils.models.items.items.game.AspectItem;
+import com.wynntils.models.items.items.game.CrafterBagItem;
 import com.wynntils.models.items.items.game.DungeonKeyItem;
 import com.wynntils.models.items.items.game.EmeraldPouchItem;
 import com.wynntils.models.items.items.game.GatheringToolItem;
@@ -29,6 +31,7 @@ import com.wynntils.models.items.items.game.PowderItem;
 import com.wynntils.models.items.items.game.TeleportScrollItem;
 import com.wynntils.models.items.items.gui.SeaskipperDestinationItem;
 import com.wynntils.models.items.items.gui.SkillPointItem;
+import com.wynntils.models.items.items.gui.TradeMarketIdentificationFilterItem;
 import com.wynntils.utils.MathUtils;
 import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.render.FontRenderer;
@@ -37,85 +40,104 @@ import com.wynntils.utils.render.TextRenderTask;
 import com.wynntils.utils.render.type.TextShadow;
 import java.util.Optional;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 
 @ConfigCategory(Category.INVENTORY)
 public class ItemTextOverlayFeature extends Feature {
     @Persisted
-    public final Config<Boolean> amplifierTierEnabled = new Config<>(true);
+    private final Config<Boolean> amplifierTierEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> amplifierTierRomanNumerals = new Config<>(true);
+    private final Config<Boolean> amplifierTierRomanNumerals = new Config<>(true);
 
     @Persisted
-    public final Config<TextShadow> amplifierTierShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<TextShadow> amplifierTierShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<Boolean> aspectEnabled = new Config<>(true);
+    private final Config<Boolean> aspectEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<TextShadow> aspectShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<Boolean> aspectTierRomanNumerals = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> dungeonKeyEnabled = new Config<>(true);
+    private final Config<TextShadow> aspectShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<TextShadow> dungeonKeyShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<Boolean> crafterBagEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> emeraldPouchTierEnabled = new Config<>(true);
+    private final Config<TextShadow> crafterBagShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<Boolean> emeraldPouchTierRomanNumerals = new Config<>(true);
+    private final Config<Boolean> dungeonKeyEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<TextShadow> emeraldPouchTierShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<TextShadow> dungeonKeyShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<Boolean> gatheringToolTierEnabled = new Config<>(true);
+    private final Config<Boolean> emeraldPouchTierEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> gatheringToolTierRomanNumerals = new Config<>(true);
+    private final Config<Boolean> emeraldPouchTierRomanNumerals = new Config<>(false);
 
     @Persisted
-    public final Config<TextShadow> gatheringToolTierShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<TextShadow> emeraldPouchTierShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<Boolean> horseTierEnabled = new Config<>(true);
+    private final Config<Boolean> gatheringToolTierEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> horseTierRomanNumerals = new Config<>(true);
+    private final Config<Boolean> gatheringToolTierRomanNumerals = new Config<>(false);
 
     @Persisted
-    public final Config<TextShadow> horseTierShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<TextShadow> gatheringToolTierShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<Boolean> hotbarTextOverlayEnabled = new Config<>(true);
+    private final Config<Boolean> horseTierEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> inventoryTextOverlayEnabled = new Config<>(true);
+    private final Config<Boolean> horseTierRomanNumerals = new Config<>(false);
 
     @Persisted
-    public final Config<Boolean> powderTierEnabled = new Config<>(true);
+    private final Config<TextShadow> horseTierShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<Boolean> powderTierRomanNumerals = new Config<>(true);
+    private final Config<Boolean> hotbarTextOverlayEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<TextShadow> powderTierShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<Boolean> inventoryTextOverlayEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> skillIconEnabled = new Config<>(true);
+    private final Config<Boolean> powderTierEnabled = new Config<>(true);
 
     @Persisted
-    public final Config<TextShadow> skillIconShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<Boolean> powderTierRomanNumerals = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> teleportScrollEnabled = new Config<>(true);
+    private final Config<TextShadow> powderTierShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted
-    public final Config<TextShadow> teleportScrollShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<Boolean> skillIconEnabled = new Config<>(true);
+
+    @Persisted
+    private final Config<TextShadow> skillIconShadow = new Config<>(TextShadow.OUTLINE);
+
+    @Persisted
+    private final Config<Boolean> teleportScrollEnabled = new Config<>(true);
+
+    @Persisted
+    private final Config<TextShadow> teleportScrollShadow = new Config<>(TextShadow.OUTLINE);
+
+    @Persisted
+    private final Config<Boolean> tradeMarketFilterEnabled = new Config<>(true);
+
+    @Persisted
+    private final Config<TextShadow> tradeMarketFilterShadow = new Config<>(TextShadow.OUTLINE);
 
     @SubscribeEvent
     public void onRenderSlot(SlotRenderEvent.Post e) {
@@ -153,7 +175,7 @@ public class ItemTextOverlayFeature extends Feature {
         poseStack.scale(textOverlay.scale(), textOverlay.scale(), 1f);
         float x = (slotX + textOverlay.xOffset()) / textOverlay.scale();
         float y = (slotY + textOverlay.yOffset()) / textOverlay.scale();
-        FontRenderer.getInstance().renderText(poseStack, x, y, textOverlay.task());
+        FontRenderer.getInstance().renderText(poseStack, x, y, textOverlay.task(), Font.DisplayMode.NORMAL);
         poseStack.popPose();
     }
 
@@ -163,6 +185,9 @@ public class ItemTextOverlayFeature extends Feature {
         }
         if (wynnItem instanceof AspectItem aspectItem) {
             return new AspectOverlay(aspectItem);
+        }
+        if (wynnItem instanceof CrafterBagItem crafterBagItem) {
+            return new CrafterBagOverlay(crafterBagItem);
         }
         if (wynnItem instanceof DungeonKeyItem dungeonKeyItem) {
             return new DungeonKeyOverlay(dungeonKeyItem);
@@ -190,6 +215,9 @@ public class ItemTextOverlayFeature extends Feature {
         }
         if (wynnItem instanceof TeleportScrollItem teleportScrollItem) {
             return new TeleportScrollOverlay(teleportScrollItem);
+        }
+        if (wynnItem instanceof TradeMarketIdentificationFilterItem tradeMarketIdentificationFilterItem) {
+            return new TradeMarketIdentificationFilterOverlay(tradeMarketIdentificationFilterItem);
         }
 
         return null;
@@ -221,18 +249,18 @@ public class ItemTextOverlayFeature extends Feature {
         @Override
         public TextOverlay getTextOverlay() {
             CustomColor highlightColor =
-                    switch (item.getAspectTier()) {
+                    switch (item.getTier()) {
                         case 2 -> TIER_2_HIGHLIGHT_COLOR;
                         case 3 -> TIER_3_HIGHLIGHT_COLOR;
                         case 4 -> TIER_4_HIGHLIGHT_COLOR;
                         default -> TIER_1_HIGHLIGHT_COLOR;
                     };
+            String text = valueToString(item.getTier(), aspectTierRomanNumerals.get());
 
             TextRenderSetting style =
                     TextRenderSetting.DEFAULT.withCustomColor(highlightColor).withTextShadow(aspectShadow.get());
 
-            return new TextOverlay(
-                    new TextRenderTask(item.getClassType().getName().substring(0, 2), style), -1, 1, 0.75f);
+            return new TextOverlay(new TextRenderTask(text, style), -1, 1, 0.75f);
         }
 
         @Override
@@ -263,6 +291,28 @@ public class ItemTextOverlayFeature extends Feature {
         @Override
         public boolean isTextOverlayEnabled() {
             return amplifierTierEnabled.get();
+        }
+    }
+
+    private final class CrafterBagOverlay implements TextOverlayInfo {
+        private final CrafterBagItem item;
+
+        private CrafterBagOverlay(CrafterBagItem item) {
+            this.item = item;
+        }
+
+        @Override
+        public TextOverlay getTextOverlay() {
+            TextRenderSetting style = TextRenderSetting.DEFAULT
+                    .withCustomColor(item.getRaidKind().getRaidColor())
+                    .withTextShadow(crafterBagShadow.get());
+
+            return new TextOverlay(new TextRenderTask(item.getRaidKind().getAbbreviation(), style), -1, 1, 0.75f);
+        }
+
+        @Override
+        public boolean isTextOverlayEnabled() {
+            return crafterBagEnabled.get();
         }
     }
 
@@ -431,7 +481,8 @@ public class ItemTextOverlayFeature extends Feature {
         public ItemTextOverlayFeature.TextOverlay getTextOverlay() {
             Skill skill = item.getSkill();
 
-            String text = skill.getSymbol();
+            StyledText text = StyledText.fromComponent(Component.literal(skill.getSymbol())
+                    .withStyle(Style.EMPTY.withFont(ResourceLocation.withDefaultNamespace("common"))));
             TextRenderSetting style = TextRenderSetting.DEFAULT
                     .withCustomColor(CustomColor.fromChatFormatting(skill.getColorCode()))
                     .withTextShadow(skillIconShadow.get());
@@ -456,7 +507,8 @@ public class ItemTextOverlayFeature extends Feature {
         public TextOverlay getTextOverlay() {
             Skill skill = item.getType().getSkill();
 
-            String text = skill.getSymbol();
+            StyledText text = StyledText.fromComponent(Component.literal(skill.getSymbol())
+                    .withStyle(Style.EMPTY.withFont(ResourceLocation.withDefaultNamespace("common"))));
             TextRenderSetting style = TextRenderSetting.DEFAULT
                     .withCustomColor(CustomColor.fromChatFormatting(skill.getColorCode()))
                     .withTextShadow(skillIconShadow.get());
@@ -502,6 +554,28 @@ public class ItemTextOverlayFeature extends Feature {
                     TextRenderSetting.DEFAULT.withCustomColor(textColor).withTextShadow(teleportScrollShadow.get());
 
             return new TextOverlay(new TextRenderTask(text, style), 0, 0, 1f);
+        }
+    }
+
+    private final class TradeMarketIdentificationFilterOverlay implements TextOverlayInfo {
+        private final TradeMarketIdentificationFilterItem item;
+
+        private TradeMarketIdentificationFilterOverlay(TradeMarketIdentificationFilterItem item) {
+            this.item = item;
+        }
+
+        @Override
+        public boolean isTextOverlayEnabled() {
+            return tradeMarketFilterEnabled.get();
+        }
+
+        @Override
+        public TextOverlay getTextOverlay() {
+            TextRenderSetting style = TextRenderSetting.DEFAULT
+                    .withCustomColor(CustomColor.fromChatFormatting(ChatFormatting.GOLD))
+                    .withTextShadow(tradeMarketFilterShadow.get());
+
+            return new TextOverlay(new TextRenderTask(item.getInitials(), style), 0, 0, 0.75f);
         }
     }
 

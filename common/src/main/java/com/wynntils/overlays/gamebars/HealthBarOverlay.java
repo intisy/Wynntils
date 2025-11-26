@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.gamebars;
@@ -21,7 +21,7 @@ import com.wynntils.utils.type.CappedValue;
 
 public class HealthBarOverlay extends OverflowableBarOverlay {
     @Persisted(i18nKey = "overlay.wynntils.healthBar.healthTexture")
-    public final Config<HealthTexture> healthTexture = new Config<>(HealthTexture.A);
+    private final Config<HealthTexture> healthTexture = new Config<>(HealthTexture.A);
 
     public HealthBarOverlay() {
         this(
@@ -50,8 +50,8 @@ public class HealthBarOverlay extends OverflowableBarOverlay {
     }
 
     @Override
-    public boolean isActive() {
-        return Models.CharacterStats.getHealth() != CappedValue.EMPTY;
+    public boolean isVisible() {
+        return Models.CharacterStats.getHealth().isPresent();
     }
 
     @Override
@@ -61,7 +61,7 @@ public class HealthBarOverlay extends OverflowableBarOverlay {
 
     @Override
     public BossBarProgress progress() {
-        CappedValue health = Models.CharacterStats.getHealth();
+        CappedValue health = Models.CharacterStats.getHealth().orElse(CappedValue.EMPTY);
         return new BossBarProgress(health, (float) health.getProgress());
     }
 

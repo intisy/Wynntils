@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features;
@@ -10,12 +10,12 @@ import com.wynntils.core.components.Services;
 import com.wynntils.core.consumers.features.Feature;
 import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Config;
-import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.mc.event.ConnectionEvent;
-import com.wynntils.mc.event.SetXpEvent;
 import com.wynntils.models.character.event.CharacterUpdateEvent;
 import com.wynntils.models.character.type.ClassType;
+import com.wynntils.models.characterstats.event.CombatXpGainEvent;
 import com.wynntils.models.territories.profile.TerritoryProfile;
 import com.wynntils.models.worlds.event.StreamModeEvent;
 import com.wynntils.models.worlds.event.WorldStateEvent;
@@ -27,16 +27,16 @@ import net.neoforged.bus.api.SubscribeEvent;
 
 public class DiscordRichPresenceFeature extends Feature {
     @Persisted
-    public final Config<Boolean> displayLocation = new Config<>(true);
+    private final Config<Boolean> displayLocation = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> displayCharacterInfo = new Config<>(true);
+    private final Config<Boolean> displayCharacterInfo = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> displayWorld = new Config<>(true);
+    private final Config<Boolean> displayWorld = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> disableInStream = new Config<>(true);
+    private final Config<Boolean> disableInStream = new Config<>(true);
 
     private static final int TERRITORY_TICKS_DELAY = 10;
 
@@ -54,7 +54,7 @@ public class DiscordRichPresenceFeature extends Feature {
     }
 
     @SubscribeEvent
-    public void onXpChange(SetXpEvent event) {
+    public void onXpChange(CombatXpGainEvent event) {
         if (!Services.Discord.isReady()) return;
         if (!Models.WorldState.onWorld()) return;
 
@@ -183,7 +183,7 @@ public class DiscordRichPresenceFeature extends Feature {
         ClassType classType = Models.Character.getClassType();
 
         if (classType == null) return;
-        String name = StyledText.fromComponent(McUtils.player().getName()).getString(PartStyle.StyleType.NONE);
+        String name = StyledText.fromComponent(McUtils.player().getName()).getString(StyleType.NONE);
         Services.Discord.setImageText(name + " - Level " + level + " " + classType.getName());
         Services.Discord.setImage(classType.getActualName(false).toLowerCase(Locale.ROOT));
     }

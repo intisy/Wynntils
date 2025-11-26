@@ -1,13 +1,13 @@
 /*
- * Copyright © Wynntils 2024.
+ * Copyright © Wynntils 2024-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.raid.scoreboard;
 
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Models;
-import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.handlers.scoreboard.ScoreboardPart;
 import com.wynntils.handlers.scoreboard.ScoreboardSegment;
 import com.wynntils.handlers.scoreboard.type.SegmentMatcher;
@@ -26,8 +26,6 @@ public class RaidScoreboardPart extends ScoreboardPart {
     // Split onto two lines, 2nd says "died"
     private static final Pattern PLAYERS_DIED_PATTERN = Pattern.compile("^Too many players have$");
     private static final Pattern OUT_OF_TIME_PATTERN = Pattern.compile("^You ran out of time!$");
-    // Sometimes this will show between challenges so we don't want this change to trigger a new challenge
-    private static final Pattern PREPARE_PATTERN = Pattern.compile("^Prepare for the next$");
     private static final Pattern TIMER_PATTERN = Pattern.compile(
             "^[-—] Time Left: (?<hours>\\d+:)?(?<minutes>\\d+):(?<seconds>\\d+)(?: \\[\\+\\d+[msMS]\\])?$");
 
@@ -47,21 +45,17 @@ public class RaidScoreboardPart extends ScoreboardPart {
 
         StyledText currentStateLine = content.getFirst();
 
-        if (currentStateLine.matches(EXIT_PATTERN, PartStyle.StyleType.NONE)) {
+        if (currentStateLine.matches(EXIT_PATTERN, StyleType.NONE)) {
             Models.Raid.tryEnterChallengeIntermission();
-        } else if (currentStateLine.matches(CHALLENGE_COMPLETED_PATTERN, PartStyle.StyleType.NONE)) {
+        } else if (currentStateLine.matches(CHALLENGE_COMPLETED_PATTERN, StyleType.NONE)) {
             Models.Raid.completeChallenge();
-        } else if (currentStateLine.matches(BUFF_PATTERN, PartStyle.StyleType.NONE)) {
+        } else if (currentStateLine.matches(BUFF_PATTERN, StyleType.NONE)) {
             Models.Raid.enterBuffRoom();
-        } else if (currentStateLine.matches(PLAYERS_DIED_PATTERN, PartStyle.StyleType.NONE)
-                || (currentStateLine.matches(OUT_OF_TIME_PATTERN, PartStyle.StyleType.NONE))) {
+        } else if (currentStateLine.matches(PLAYERS_DIED_PATTERN, StyleType.NONE)
+                || (currentStateLine.matches(OUT_OF_TIME_PATTERN, StyleType.NONE))) {
             Models.Raid.failedRaid();
-        } else if (Models.Raid.getCurrentRaid() != null
-                && currentStateLine.matches(
-                        Models.Raid.getCurrentRaid().getBossScoreboardPattern(), PartStyle.StyleType.NONE)) {
-            Models.Raid.startBossFight();
-        } else if (!currentStateLine.matches(PREPARE_PATTERN, PartStyle.StyleType.NONE)) {
-            Models.Raid.tryStartChallenge();
+        } else {
+            Models.Raid.tryStartChallenge(currentStateLine);
         }
 
         // Some challenges have instructions that take up more than 1 line so we need to loop through the remaining
@@ -72,7 +66,7 @@ public class RaidScoreboardPart extends ScoreboardPart {
         }
 
         for (StyledText line : content.subList(1, content.size())) {
-            Matcher matcher = line.getMatcher(TIMER_PATTERN, PartStyle.StyleType.NONE);
+            Matcher matcher = line.getMatcher(TIMER_PATTERN, StyleType.NONE);
             if (matcher.matches()) {
                 int minutes = Integer.parseInt(matcher.group("minutes"));
                 int seconds = Integer.parseInt(matcher.group("seconds"));
@@ -87,7 +81,7 @@ public class RaidScoreboardPart extends ScoreboardPart {
             }
 
             // Challenges line should be last so no need to break
-            matcher = line.getMatcher(CHALLENGES_PATTERN, PartStyle.StyleType.NONE);
+            matcher = line.getMatcher(CHALLENGES_PATTERN, StyleType.NONE);
             if (matcher.matches()) {
                 Models.Raid.setChallenges(
                         new CappedValue(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))));

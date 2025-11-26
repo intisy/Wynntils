@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.services.hades;
@@ -9,6 +9,7 @@ import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Services;
 import com.wynntils.features.players.HadesFeature;
 import com.wynntils.hades.objects.HadesConnection;
+import com.wynntils.hades.protocol.enums.HadesVersion;
 import com.wynntils.hades.protocol.interfaces.adapters.IHadesClientAdapter;
 import com.wynntils.hades.protocol.packets.client.HCPacketAuthenticate;
 import com.wynntils.hades.protocol.packets.server.HSPacketAuthenticationResponse;
@@ -18,7 +19,7 @@ import com.wynntils.hades.protocol.packets.server.HSPacketDiscordLobbyServer;
 import com.wynntils.hades.protocol.packets.server.HSPacketPong;
 import com.wynntils.hades.protocol.packets.server.HSPacketUpdateMutual;
 import com.wynntils.services.hades.event.HadesEvent;
-import com.wynntils.services.hades.event.HadesUserAddedEvent;
+import com.wynntils.services.hades.event.HadesUserEvent;
 import com.wynntils.utils.mc.McUtils;
 import java.util.Optional;
 import net.minecraft.ChatFormatting;
@@ -51,7 +52,8 @@ public class HadesClientHandler implements IHadesClientAdapter {
                     "Tried to auth to the remote player server without being logged in on Athena.");
         }
 
-        hadesConnection.sendPacketAndFlush(new HCPacketAuthenticate(Services.WynntilsAccount.getToken()));
+        hadesConnection.sendPacketAndFlush(
+                new HCPacketAuthenticate(Services.WynntilsAccount.getToken(), HadesVersion.VERSION_0_6_1));
     }
 
     @Override
@@ -115,7 +117,7 @@ public class HadesClientHandler implements IHadesClientAdapter {
         } else {
             HadesUser hadesUser = new HadesUser(packet);
             userRegistry.putUser(packet.getUser(), hadesUser);
-            WynntilsMod.postEventOnMainThread(new HadesUserAddedEvent(hadesUser));
+            WynntilsMod.postEventOnMainThread(new HadesUserEvent.Added(hadesUser));
         }
     }
 
@@ -126,7 +128,8 @@ public class HadesClientHandler implements IHadesClientAdapter {
 
     @Override
     public void handleClearMutual(HSPacketClearMutual packet) {
-        userRegistry.removeUser(packet.getUser());
+        HadesUser oldUser = userRegistry.removeUser(packet.getUser());
+        WynntilsMod.postEventOnMainThread(new HadesUserEvent.Removed(oldUser));
     }
 
     @Override

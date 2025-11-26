@@ -1,25 +1,22 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.consumers.overlays;
 
 import com.mojang.blaze3d.platform.Window;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.wynntils.core.components.Managers;
-import com.wynntils.core.components.Models;
 import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.utils.colors.CommonColors;
 import com.wynntils.utils.colors.CustomColor;
-import com.wynntils.utils.render.FontRenderer;
 import com.wynntils.utils.render.buffered.BufferedFontRenderer;
 import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.TextShadow;
 import com.wynntils.utils.render.type.VerticalAlignment;
-import com.wynntils.utils.type.ErrorOr;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 
 /**
@@ -27,13 +24,10 @@ import net.minecraft.client.renderer.MultiBufferSource;
  */
 public abstract class TextOverlay extends DynamicOverlay {
     @Persisted(i18nKey = "overlay.wynntils.textOverlay.textShadow")
-    public final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted(i18nKey = "overlay.wynntils.textOverlay.fontScale")
-    public final Config<Float> fontScale = new Config<>(1.0f);
-
-    @Persisted(i18nKey = "overlay.wynntils.textOverlay.enabledTemplate")
-    public final Config<String> enabledTemplate = new Config<>("");
+    protected final Config<Float> fontScale = new Config<>(1.0f);
 
     private StyledText[] cachedLines = new StyledText[0];
 
@@ -67,49 +61,47 @@ public abstract class TextOverlay extends DynamicOverlay {
     }
 
     @Override
-    public void render(PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
-        if (!isRendered()) return;
-
-        renderTemplate(poseStack, bufferSource, cachedLines, getTextScale());
+    public void render(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        renderTemplate(guiGraphics, bufferSource, cachedLines, getTextScale());
     }
 
     @Override
     public void renderPreview(
-            PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
-        if (!Models.WorldState.onWorld()) return;
-
-        renderTemplate(poseStack, bufferSource, calculateTemplateValue(getPreviewTemplate()), getTextScale());
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        renderTemplate(guiGraphics, bufferSource, calculateTemplateValue(getPreviewTemplate()), getTextScale());
     }
 
     private void renderTemplate(
-            PoseStack poseStack, MultiBufferSource bufferSource, StyledText[] lines, float textScale) {
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, StyledText[] lines, float textScale) {
         float renderX = this.getRenderX();
         float renderY = this.getRenderY();
-        for (StyledText line : lines) {
-            BufferedFontRenderer.getInstance()
-                    .renderAlignedTextInBox(
-                            poseStack,
-                            bufferSource,
-                            line,
-                            renderX,
-                            renderX + this.getWidth(),
-                            renderY,
-                            renderY + this.getHeight(),
-                            0,
-                            this.getRenderColor(),
-                            this.getRenderHorizontalAlignment(),
-                            this.getRenderVerticalAlignment(),
-                            this.textShadow.get(),
-                            textScale);
-
-            renderY += FontRenderer.getInstance().getFont().lineHeight;
-        }
+        BufferedFontRenderer.getInstance()
+                .renderAlignedTextInBox(
+                        guiGraphics.pose(),
+                        bufferSource,
+                        lines,
+                        renderX,
+                        renderX + this.getWidth(),
+                        renderY,
+                        renderY + this.getHeight(),
+                        0,
+                        this.getRenderColor(),
+                        this.getRenderHorizontalAlignment(),
+                        this.getRenderVerticalAlignment(),
+                        this.textShadow.get(),
+                        textScale);
     }
 
     @Override
     public void tick() {
-        if (!Models.WorldState.onWorld()) return;
+        if (!isRendered()) return;
         cachedLines = calculateTemplateValue(getTemplate());
+    }
+
+    @Override
+    protected boolean isVisible() {
+        return !getTemplate().isEmpty();
     }
 
     protected StyledText[] calculateTemplateValue(String template) {
@@ -127,27 +119,4 @@ public abstract class TextOverlay extends DynamicOverlay {
     protected abstract String getTemplate();
 
     protected abstract String getPreviewTemplate();
-
-    @Override
-    protected void onConfigUpdate(Config<?> config) {}
-
-    public final boolean isRendered() {
-        // If the enabled template is empty,
-        // the overlay is rendered when the player is in the world.
-        if (enabledTemplate.get().isEmpty()) return isRenderedDefault();
-
-        // If the enabled template is not empty,
-        // the overlay is rendered when the template is true.
-        ErrorOr<Boolean> enabledOrError = Managers.Function.tryGetRawValueOfType(enabledTemplate.get(), Boolean.class);
-        return !enabledOrError.hasError() && enabledOrError.getValue();
-    }
-
-    /**
-     * Returns whether the overlay is rendered with the default (empty) template.
-     *
-     * @return whether the overlay is rendered with the default (empty) template
-     */
-    public boolean isRenderedDefault() {
-        return Models.WorldState.onWorld();
-    }
 }

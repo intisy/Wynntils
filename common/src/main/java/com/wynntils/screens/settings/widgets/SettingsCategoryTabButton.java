@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.settings.widgets;
@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 import net.minecraft.network.chat.Component;
 
 public class SettingsCategoryTabButton extends GeneralSettingsTabButton {
-    private Category category;
+    private final Category category;
 
     public SettingsCategoryTabButton(
             int x,
@@ -21,8 +21,21 @@ public class SettingsCategoryTabButton extends GeneralSettingsTabButton {
             Consumer<Integer> onClick,
             List<Component> tooltip,
             Category category,
-            boolean selectedCategory) {
-        super(x, y, width, height, onClick, tooltip, Texture.TAG_RED, category.getCategoryIcon(), OffsetDirection.UP);
+            boolean selectedCategory,
+            int offsetX,
+            int offsetY) {
+        super(
+                x,
+                y,
+                width,
+                height,
+                onClick,
+                tooltip,
+                Texture.TAG_RED,
+                category.getCategoryIcon(),
+                OffsetDirection.UP,
+                offsetX,
+                offsetY);
         this.category = category;
         this.selectedTab = selectedCategory;
 
@@ -36,8 +49,21 @@ public class SettingsCategoryTabButton extends GeneralSettingsTabButton {
             int height,
             Consumer<Integer> onClick,
             List<Component> tooltip,
-            boolean selectedCategory) {
-        super(x, y, width, height, onClick, tooltip, Texture.TAG_RED, Texture.ALL_CONFIG_ICON, OffsetDirection.UP);
+            boolean selectedCategory,
+            int offsetX,
+            int offsetY) {
+        super(
+                x,
+                y,
+                width,
+                height,
+                onClick,
+                tooltip,
+                Texture.TAG_RED,
+                Texture.ALL_CONFIG_ICON,
+                OffsetDirection.UP,
+                offsetX,
+                offsetY);
         this.category = null;
         this.selectedTab = selectedCategory;
 

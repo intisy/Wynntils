@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.handlers.item;
@@ -7,8 +7,8 @@ package com.wynntils.handlers.item;
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Handler;
 import com.wynntils.core.mod.type.CrashType;
-import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.handlers.item.event.ItemRenamedEvent;
 import com.wynntils.mc.event.ContainerSetContentEvent;
 import com.wynntils.mc.event.ContainerSetSlotEvent;
@@ -40,7 +40,7 @@ import net.minecraft.world.item.Items;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 
-public class ItemHandler extends Handler {
+public final class ItemHandler extends Handler {
     private static final List<Item> WILDCARD_ITEMS = List.of(Items.DIAMOND_SHOVEL, Items.DIAMOND_PICKAXE);
 
     private final List<ItemAnnotator> annotators = new ArrayList<>();
@@ -335,7 +335,7 @@ public class ItemHandler extends Handler {
                 int start = matcher.start(1);
                 int end = matcher.end(1);
 
-                StyledText[] separate = name.partition(PartStyle.StyleType.DEFAULT, start, end);
+                StyledText[] separate = name.partition(StyleType.DEFAULT, start, end);
 
                 return separate[1];
             }

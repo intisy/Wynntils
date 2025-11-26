@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.gamebars;
@@ -29,7 +29,7 @@ public class CorruptedBarOverlay extends BaseBarOverlay {
 
     @Override
     public BossBarProgress progress() {
-        return Models.BossBar.corruptedBar.getBarProgress();
+        return Models.Ability.corruptedBar.getBarProgress();
     }
 
     @Override
@@ -43,7 +43,7 @@ public class CorruptedBarOverlay extends BaseBarOverlay {
     }
 
     @Override
-    public boolean isActive() {
-        return Models.BossBar.corruptedBar.isActive();
+    public boolean isVisible() {
+        return Models.Ability.corruptedBar.isActive();
     }
 }

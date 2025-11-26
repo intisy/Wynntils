@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.gamebars;
@@ -29,7 +29,7 @@ public class FocusBarOverlay extends BaseBarOverlay {
 
     @Override
     public BossBarProgress progress() {
-        return Models.BossBar.focusBar.getBarProgress();
+        return Models.Ability.focusBar.getBarProgress();
     }
 
     @Override
@@ -43,7 +43,7 @@ public class FocusBarOverlay extends BaseBarOverlay {
     }
 
     @Override
-    public boolean isActive() {
-        return Models.BossBar.focusBar.isActive();
+    public boolean isVisible() {
+        return Models.Ability.focusBar.isActive();
     }
 }

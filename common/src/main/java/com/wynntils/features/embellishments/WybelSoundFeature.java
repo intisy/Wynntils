@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.embellishments;
@@ -10,7 +10,7 @@ import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.core.text.StyledText;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
+import com.wynntils.handlers.chat.event.ChatMessageEvent;
 import com.wynntils.handlers.chat.type.RecipientType;
 import com.wynntils.utils.mc.McUtils;
 import net.minecraft.resources.ResourceLocation;
@@ -28,23 +28,23 @@ public class WybelSoundFeature extends Feature {
     private static final SoundEvent WYBEL_PURR_SOUND = SoundEvent.createVariableRangeEvent(WYBEL_PURR_ID);
 
     @Persisted
-    public final Config<Boolean> hideText = new Config<>(false);
+    private final Config<Boolean> hideText = new Config<>(false);
 
     @SubscribeEvent
-    public void onChat(ChatMessageReceivedEvent event) {
+    public void onChat(ChatMessageEvent.Match event) {
         if (event.getRecipientType() != RecipientType.PETS) return;
 
-        StyledText msg = event.getStyledText();
-        if (msg.contains("squeak")) {
+        StyledText message = event.getMessage();
+        if (message.contains("squeak")) {
             McUtils.playSoundAmbient(WYBEL_SQUEAK_SOUND);
             if (hideText.get()) {
-                event.setCanceled(true);
+                event.cancelChat();
             }
         }
-        if (msg.contains("purr")) {
+        if (message.contains("purr")) {
             McUtils.playSoundAmbient(WYBEL_PURR_SOUND);
             if (hideText.get()) {
-                event.setCanceled(true);
+                event.cancelChat();
             }
         }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.chat;
@@ -17,7 +17,8 @@ import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.core.text.StyledTextPart;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
+import com.wynntils.core.text.type.StyleType;
+import com.wynntils.handlers.chat.event.ChatMessageEvent;
 import com.wynntils.mc.event.KeyInputEvent;
 import com.wynntils.mc.mixin.accessors.ChatScreenAccessor;
 import com.wynntils.mc.mixin.accessors.ItemStackInfoAccessor;
@@ -70,20 +71,20 @@ public class ChatItemFeature extends Feature {
 
     @RegisterKeyBind
     private final KeyBind itemRecordKeybind = new KeyBind(
-            "Open Item Record", GLFW.GLFW_KEY_UNKNOWN, true, () -> McUtils.mc().setScreen(SavedItemsScreen.create()));
+            "Open Item Record", GLFW.GLFW_KEY_UNKNOWN, true, () -> McUtils.setScreen(SavedItemsScreen.create()));
 
     @Persisted
-    public final Config<Boolean> showSharingScreen = new Config<>(true);
+    private final Config<Boolean> showSharingScreen = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> showPerfectOrDefective = new Config<>(true);
+    private final Config<Boolean> showPerfectOrDefective = new Config<>(true);
 
     private final Map<String, String> chatItems = new HashMap<>();
 
     @SubscribeEvent
     public void onKeyTyped(KeyInputEvent e) {
         if (!Models.WorldState.onWorld()) return;
-        if (!(McUtils.mc().screen instanceof ChatScreen chatScreen)) return;
+        if (!(McUtils.screen() instanceof ChatScreen chatScreen)) return;
 
         EditBox chatInput = ((ChatScreenAccessor) chatScreen).getChatInput();
 
@@ -101,38 +102,44 @@ public class ChatItemFeature extends Feature {
         // check for new chat item encoding
         Matcher matcher = Models.ItemEncoding.getEncodedDataPattern().matcher(chatInput.getValue());
         while (matcher.find()) {
-            EncodedByteBuffer encodedByteBuffer = EncodedByteBuffer.fromUtf16String(matcher.group());
-            ErrorOr<WynnItem> errorOrDecodedItem = Models.ItemEncoding.decodeItem(encodedByteBuffer);
+            String itemName = matcher.group("name");
+            EncodedByteBuffer encodedByteBuffer = EncodedByteBuffer.fromUtf16String(matcher.group("data"));
+            ErrorOr<WynnItem> errorOrDecodedItem = Models.ItemEncoding.decodeItem(encodedByteBuffer, itemName);
 
-            String name;
-            if (errorOrDecodedItem.hasError()) {
-                name = "encoding_error";
-            } else {
-                WynnItem decodedItem = errorOrDecodedItem.getValue();
-
-                name = decodedItem.getClass().getSimpleName();
-
-                if (decodedItem instanceof NamedItemProperty namedItemProperty) {
-                    name = namedItemProperty.getName();
-                }
-            }
-
-            while (chatItems.containsKey(name)) { // avoid overwriting entries
-                name += "_";
-            }
+            String name = getItemName(errorOrDecodedItem);
 
             chatInput.setValue(chatInput.getValue().replace(matcher.group(), "<" + name + ">"));
             chatItems.put(name, matcher.group());
         }
     }
 
+    private String getItemName(ErrorOr<WynnItem> errorOrDecodedItem) {
+        String name;
+        if (errorOrDecodedItem.hasError()) {
+            name = "encoding_error";
+        } else {
+            WynnItem decodedItem = errorOrDecodedItem.getValue();
+
+            name = decodedItem.getClass().getSimpleName();
+
+            if (decodedItem instanceof NamedItemProperty namedItemProperty) {
+                name = namedItemProperty.getName();
+            }
+        }
+
+        while (chatItems.containsKey(name)) { // avoid overwriting entries
+            name += "_";
+        }
+        return name;
+    }
+
     @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public void onChatReceived(ChatMessageReceivedEvent e) {
+    public void onChatReceived(ChatMessageEvent.Edit e) {
         if (!Models.WorldState.onWorld()) return;
 
-        StyledText styledText = e.getStyledText();
+        StyledText message = e.getMessage();
 
-        StyledText unwrapped = StyledTextUtils.unwrap(styledText);
+        StyledText unwrapped = StyledTextUtils.unwrap(message);
 
         // Decode old chat item encoding
         StyledText modified = unwrapped.iterate((part, changes) -> {
@@ -167,7 +174,7 @@ public class ChatItemFeature extends Feature {
 
         if (share) {
             if (showSharingScreen.get()) {
-                McUtils.mc().setScreen(ItemSharingScreen.create(wynnItemOpt.get(), hoveredSlot.getItem()));
+                McUtils.setScreen(ItemSharingScreen.create(wynnItemOpt.get(), hoveredSlot.getItem()));
             } else {
                 makeChatPrompt(wynnItemOpt.get());
             }
@@ -188,14 +195,15 @@ public class ChatItemFeature extends Feature {
     }
 
     private void decodeChatEncoding(List<StyledTextPart> changes, StyledTextPart partToReplace) {
-        Matcher matcher = Models.ItemEncoding.getEncodedDataPattern()
-                .matcher(partToReplace.getString(null, PartStyle.StyleType.NONE));
+        Matcher matcher =
+                Models.ItemEncoding.getEncodedDataPattern().matcher(partToReplace.getString(null, StyleType.NONE));
 
         while (matcher.find()) {
-            EncodedByteBuffer encodedByteBuffer = EncodedByteBuffer.fromUtf16String(matcher.group());
-            ErrorOr<WynnItem> errorOrDecodedItem = Models.ItemEncoding.decodeItem(encodedByteBuffer);
+            String itemName = matcher.group("name");
+            EncodedByteBuffer encodedByteBuffer = EncodedByteBuffer.fromUtf16String(matcher.group("data"));
+            ErrorOr<WynnItem> errorOrDecodedItem = Models.ItemEncoding.decodeItem(encodedByteBuffer, itemName);
 
-            String unformattedString = partToReplace.getString(null, PartStyle.StyleType.NONE);
+            String unformattedString = partToReplace.getString(null, StyleType.NONE);
 
             String firstPart = unformattedString.substring(0, matcher.start());
             String lastPart = unformattedString.substring(matcher.end());
@@ -237,22 +245,23 @@ public class ChatItemFeature extends Feature {
         if (wynnItem instanceof NamedItemProperty namedItemProperty) {
             nameText = StyledText.fromString(namedItemProperty.getName());
 
+            if (wynnItem instanceof ShinyItemProperty shinyItemProperty
+                    && shinyItemProperty.getShinyStat().isPresent()) {
+                parts.add(new StyledTextPart("⬡ ", Style.EMPTY.withColor(ChatFormatting.WHITE), null, Style.EMPTY));
+                nameText = StyledText.fromString("Shiny ").append(nameText);
+            }
+
             if (showPerfectOrDefective.get()) {
                 if (wynnItem instanceof IdentifiableItemProperty<?, ?> identifiableItemProperty) {
                     if (identifiableItemProperty.isPerfect()) {
                         nameText = StyledText.fromComponent(
-                                ComponentUtils.makeRainbowStyle("Perfect " + nameText.getString()));
+                                ComponentUtils.makeRainbowStyle("Perfect " + nameText.getString(), true));
                     } else if (identifiableItemProperty.isDefective()) {
                         nameText = StyledText.fromComponent(
                                 ComponentUtils.makeObfuscated("Defective " + nameText.getString(), 0, 0));
                     }
                 }
             }
-        }
-
-        if (wynnItem instanceof ShinyItemProperty shinyItemProperty
-                && shinyItemProperty.getShinyStat().isPresent()) {
-            parts.add(new StyledTextPart("⬡ ", Style.EMPTY.withColor(ChatFormatting.WHITE), null, Style.EMPTY));
         }
 
         Style style = Style.EMPTY.applyFormat(ChatFormatting.UNDERLINE).withColor(ChatFormatting.GOLD);
@@ -267,9 +276,9 @@ public class ChatItemFeature extends Feature {
         style = style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_ITEM, itemHoverEvent));
 
         // Add the item name
-        StyledText appenedNameText =
+        StyledText appendedNameText =
                 StyledText.fromComponent(Component.empty().withStyle(style).append(nameText.getComponent()));
-        parts.addAll(Arrays.stream(appenedNameText.getPartsAsTextArray())
+        parts.addAll(Arrays.stream(appendedNameText.getPartsAsTextArray())
                 .map(StyledText::getFirstPart)
                 .map(part -> part.withStyle(part.getPartStyle().withUnderlined(true)))
                 .toList());
@@ -278,8 +287,9 @@ public class ChatItemFeature extends Feature {
     }
 
     private void makeChatPrompt(WynnItem wynnItem) {
-        EncodingSettings encodingSettings = new EncodingSettings(
-                Models.ItemEncoding.extendedIdentificationEncoding.get(), Models.ItemEncoding.shareItemName.get());
+        // Do NOT share the name of the item encoded, as we share the item name in the chat message
+        EncodingSettings encodingSettings =
+                new EncodingSettings(Models.ItemEncoding.extendedIdentificationEncoding.get(), false);
         ErrorOr<EncodedByteBuffer> errorOrEncodedByteBuffer =
                 Models.ItemEncoding.encodeItem(wynnItem, encodingSettings);
         if (errorOrEncodedByteBuffer.hasError()) {
@@ -300,7 +310,7 @@ public class ChatItemFeature extends Feature {
                 .withStyle(ChatFormatting.UNDERLINE)
                 .withStyle(s -> s.withClickEvent(new ClickEvent(
                         ClickEvent.Action.COPY_TO_CLIPBOARD,
-                        errorOrEncodedByteBuffer.getValue().toUtf16String())))
+                        Models.ItemEncoding.makeItemString(wynnItem, errorOrEncodedByteBuffer.getValue()))))
                 .withStyle(s -> s.withHoverEvent(new HoverEvent(
                         HoverEvent.Action.SHOW_TEXT,
                         Component.translatable("feature.wynntils.chatItem.chatItemTooltip")

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.consumers.overlays;
@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.util.profiling.Profiler;
 import net.neoforged.bus.api.ICancellableEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import org.apache.commons.lang3.reflect.FieldUtils;
@@ -93,22 +94,20 @@ public final class OverlayManager extends Manager {
         enabledOverlays.remove(disabledOverlay);
         WynntilsMod.unregisterEventListener(disabledOverlay);
 
-        enabledOverlays.forEach(
-                overlay -> overlay.getConfigOptionFromString("userEnabled").ifPresent(overlay::callOnConfigUpdate));
+        disabledOverlay.getConfigOptionFromString("userEnabled").ifPresent(disabledOverlay::callOnConfigUpdate);
     }
 
     public void enableOverlays(Feature parent) {
         overlayParentMap.getOrDefault(parent, List.of()).forEach(this::enableOverlay);
     }
 
-    public void enableOverlay(Overlay enableOverlay) {
-        if (!enableOverlay.shouldBeEnabled() || isEnabled(enableOverlay)) return;
+    public void enableOverlay(Overlay enabledOverlay) {
+        if (!enabledOverlay.shouldBeEnabled() || isEnabled(enabledOverlay)) return;
 
-        enabledOverlays.add(enableOverlay);
-        WynntilsMod.registerEventListener(enableOverlay);
+        enabledOverlays.add(enabledOverlay);
+        WynntilsMod.registerEventListener(enabledOverlay);
 
-        enabledOverlays.forEach(
-                overlay -> overlay.getConfigOptionFromString("userEnabled").ifPresent(overlay::callOnConfigUpdate));
+        enabledOverlay.getConfigOptionFromString("userEnabled").ifPresent(enabledOverlay::callOnConfigUpdate);
     }
 
     public void discoverOverlays(Feature feature) {
@@ -204,7 +203,10 @@ public final class OverlayManager extends Manager {
     // region Ticking
     @SubscribeEvent
     public void onTick(TickEvent event) {
-        enabledOverlays.forEach(Overlay::tick);
+        enabledOverlays.forEach(overlay -> {
+            overlay.tick();
+            overlay.updateEnabledCache();
+        });
     }
 
     // endregion
@@ -213,16 +215,16 @@ public final class OverlayManager extends Manager {
 
     @SubscribeEvent
     public void onRenderPre(RenderEvent.Pre event) {
-        McUtils.mc().getProfiler().push("preRenOverlay");
+        Profiler.get().push("preRenOverlay");
         renderOverlays(event, RenderState.PRE);
-        McUtils.mc().getProfiler().pop();
+        Profiler.get().pop();
     }
 
     @SubscribeEvent
     public void onRenderPost(RenderEvent.Post event) {
-        McUtils.mc().getProfiler().push("postRenOverlay");
+        Profiler.get().push("postRenOverlay");
         renderOverlays(event, RenderState.POST);
-        McUtils.mc().getProfiler().pop();
+        Profiler.get().pop();
     }
 
     private void renderOverlays(RenderEvent event, RenderState renderState) {
@@ -231,12 +233,12 @@ public final class OverlayManager extends Manager {
         boolean shouldRender = true;
         Overlay selectedOverlay = null;
 
-        if (McUtils.mc().screen instanceof OverlayManagementScreen screen) {
+        if (McUtils.screen() instanceof OverlayManagementScreen screen) {
             shouldRender = false;
             showPreview = screen.showPreview();
             renderNonSelected = screen.shouldRenderAllOverlays();
             selectedOverlay = screen.getSelectedOverlay();
-        } else if (McUtils.mc().screen instanceof OverlaySelectionScreen screen) {
+        } else if (McUtils.screen() instanceof OverlaySelectionScreen screen) {
             if (screen.renderingPreview()) {
                 showPreview = true;
                 renderNonSelected = screen.shouldShowOverlays();
@@ -270,14 +272,15 @@ public final class OverlayManager extends Manager {
                     if (selectedOverlay != null && overlay != selectedOverlay && !renderNonSelected) continue;
 
                     overlay.renderPreview(
-                            event.getPoseStack(), BUFFER_SOURCE, event.getDeltaTracker(), event.getWindow());
-                } else if (shouldRender) {
+                            event.getGuiGraphics(), BUFFER_SOURCE, event.getDeltaTracker(), event.getWindow());
+                } else if (shouldRender && overlay.isRendered()) {
                     long startTime = System.currentTimeMillis();
-                    overlay.render(event.getPoseStack(), BUFFER_SOURCE, event.getDeltaTracker(), event.getWindow());
+                    overlay.renderOrErrorMessage(
+                            event.getGuiGraphics(), BUFFER_SOURCE, event.getDeltaTracker(), event.getWindow());
                     logProfilingData(startTime, overlay);
                 }
             } catch (Throwable t) {
-                RenderUtils.disableScissor();
+                RenderUtils.disableScissor(event.getGuiGraphics());
                 RenderUtils.clearMask();
 
                 // We can't disable it right away since that will cause ConcurrentModificationException

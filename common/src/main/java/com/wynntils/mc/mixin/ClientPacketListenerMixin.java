@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2021-2024.
+ * Copyright © Wynntils 2021-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.mc.mixin;
@@ -13,20 +13,23 @@ import com.wynntils.core.events.MixinHelper;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.mc.event.AddEntityEvent;
 import com.wynntils.mc.event.AdvancementUpdateEvent;
-import com.wynntils.mc.event.ChatPacketReceivedEvent;
 import com.wynntils.mc.event.ChatSentEvent;
 import com.wynntils.mc.event.ChunkReceivedEvent;
 import com.wynntils.mc.event.CommandSentEvent;
 import com.wynntils.mc.event.CommandsAddedEvent;
+import com.wynntils.mc.event.ConnectionEvent;
 import com.wynntils.mc.event.ContainerSetContentEvent;
 import com.wynntils.mc.event.ContainerSetSlotEvent;
+import com.wynntils.mc.event.EntityPositionSyncEvent;
 import com.wynntils.mc.event.LocalSoundEvent;
 import com.wynntils.mc.event.MenuEvent;
 import com.wynntils.mc.event.MobEffectEvent;
 import com.wynntils.mc.event.ParticleAddedEvent;
 import com.wynntils.mc.event.PlayerInfoEvent;
 import com.wynntils.mc.event.PlayerInfoFooterChangedEvent;
+import com.wynntils.mc.event.PlayerInfoUpdateEvent;
 import com.wynntils.mc.event.PlayerTeleportEvent;
+import com.wynntils.mc.event.PongReceivedEvent;
 import com.wynntils.mc.event.RemoveEntitiesEvent;
 import com.wynntils.mc.event.ScoreboardEvent;
 import com.wynntils.mc.event.ScoreboardSetDisplayObjectiveEvent;
@@ -35,10 +38,9 @@ import com.wynntils.mc.event.SetEntityDataEvent;
 import com.wynntils.mc.event.SetEntityPassengersEvent;
 import com.wynntils.mc.event.SetPlayerTeamEvent;
 import com.wynntils.mc.event.SetSpawnEvent;
-import com.wynntils.mc.event.SetXpEvent;
 import com.wynntils.mc.event.SubtitleSetTextEvent;
-import com.wynntils.mc.event.TeleportEntityEvent;
 import com.wynntils.mc.event.TitleSetTextEvent;
+import com.wynntils.mc.mixin.accessors.ClientboundPlayerInfoUpdatePacketAccessor;
 import com.wynntils.mc.mixin.accessors.ClientboundSetPlayerTeamPacketAccessor;
 import com.wynntils.utils.mc.McUtils;
 import java.util.List;
@@ -48,22 +50,20 @@ import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.multiplayer.ClientCommonPacketListenerImpl;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.CommonListenerCookie;
-import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.Connection;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerClosePacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
+import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
-import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -73,7 +73,6 @@ import net.minecraft.network.protocol.game.ClientboundResetScorePacket;
 import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
-import net.minecraft.network.protocol.game.ClientboundSetExperiencePacket;
 import net.minecraft.network.protocol.game.ClientboundSetObjectivePacket;
 import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
@@ -81,11 +80,10 @@ import net.minecraft.network.protocol.game.ClientboundSetScorePacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
-import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ClientboundTabListPacket;
-import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateAdvancementsPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket;
+import net.minecraft.network.protocol.ping.ClientboundPongResponsePacket;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.flag.FeatureFlagSet;
@@ -174,6 +172,20 @@ public abstract class ClientPacketListenerMixin extends ClientCommonPacketListen
 
     @Inject(
             method = "handlePlayerInfoUpdate(Lnet/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket;)V",
+            at = @At("HEAD"))
+    private void handlePlayerInfoUpdatePre(ClientboundPlayerInfoUpdatePacket packet, CallbackInfo ci) {
+        if (!isRenderThread()) return;
+        if (!MixinHelper.onWynncraft()) return;
+
+        PlayerInfoUpdateEvent e = new PlayerInfoUpdateEvent(packet.entries(), packet.newEntries());
+        MixinHelper.post(e);
+        if (e.getEntries() != packet.entries()) {
+            ((ClientboundPlayerInfoUpdatePacketAccessor) packet).setEntries(e.getEntries());
+        }
+    }
+
+    @Inject(
+            method = "handlePlayerInfoUpdate(Lnet/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket;)V",
             at = @At("RETURN"))
     private void handlePlayerInfoUpdatePost(ClientboundPlayerInfoUpdatePacket packet, CallbackInfo ci) {
         if (!isRenderThread()) return;
@@ -222,9 +234,12 @@ public abstract class ClientPacketListenerMixin extends ClientCommonPacketListen
             at = @At("HEAD"))
     private void handleMovePlayerPost(ClientboundPlayerPositionPacket packet, CallbackInfo ci) {
         if (!isRenderThread()) return;
-        if (!packet.getRelativeArguments().isEmpty()) return;
+        if (!packet.relatives().isEmpty()) return;
 
-        MixinHelper.post(new PlayerTeleportEvent(new Vec3(packet.getX(), packet.getY(), packet.getZ())));
+        MixinHelper.post(new PlayerTeleportEvent(new Vec3(
+                packet.change().position().x(),
+                packet.change().position().y(),
+                packet.change().position().z())));
     }
 
     @Inject(
@@ -350,16 +365,6 @@ public abstract class ClientPacketListenerMixin extends ClientCommonPacketListen
     }
 
     @Inject(
-            method = "handleSetExperience(Lnet/minecraft/network/protocol/game/ClientboundSetExperiencePacket;)V",
-            at = @At("RETURN"))
-    private void handleSetExperiencePost(ClientboundSetExperiencePacket packet, CallbackInfo ci) {
-        if (!isRenderThread()) return;
-
-        MixinHelper.post(new SetXpEvent(
-                packet.getExperienceProgress(), packet.getTotalExperience(), packet.getExperienceLevel()));
-    }
-
-    @Inject(
             method =
                     "handleSetEntityPassengersPacket(Lnet/minecraft/network/protocol/game/ClientboundSetPassengersPacket;)V",
             at = @At("HEAD"),
@@ -388,7 +393,7 @@ public abstract class ClientPacketListenerMixin extends ClientCommonPacketListen
 
             // Signal loading complete to the loading screen,
             // or else we are stuck in an "infinite" loading state
-            if (McUtils.mc().screen instanceof ReceivingLevelScreen receivingLevelScreen) {
+            if (McUtils.screen() instanceof ReceivingLevelScreen receivingLevelScreen) {
                 receivingLevelScreen.onClose();
             }
         }
@@ -418,65 +423,6 @@ public abstract class ClientPacketListenerMixin extends ClientCommonPacketListen
         SubtitleSetTextEvent event = new SubtitleSetTextEvent(packet.text());
         MixinHelper.post(event);
         if (event.isCanceled()) {
-            ci.cancel();
-        }
-    }
-
-    @Inject(
-            method = "handlePlayerChat(Lnet/minecraft/network/protocol/game/ClientboundPlayerChatPacket;)V",
-            at =
-                    @At(
-                            value = "INVOKE",
-                            target =
-                                    "Lnet/minecraft/client/multiplayer/chat/ChatListener;handlePlayerChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;Lcom/mojang/authlib/GameProfile;Lnet/minecraft/network/chat/ChatType$Bound;)V"),
-            cancellable = true)
-    private void handlePlayerChat(
-            ClientboundPlayerChatPacket packet,
-            CallbackInfo ci,
-            @Local PlayerChatMessage playerChatMessage,
-            @Local PlayerInfo playerInfo) {
-        if (!isRenderThread()) return;
-
-        // Currently, Wynncraft does not have any Player chat messages so this code
-        // is not really used
-        ChatPacketReceivedEvent event = new ChatPacketReceivedEvent.Player(packet.unsignedContent());
-        MixinHelper.post(event);
-        if (event.isCanceled()) {
-            ci.cancel();
-            return;
-        }
-
-        if (event.isMessageChanged()) {
-            this.minecraft
-                    .getChatListener()
-                    .handlePlayerChatMessage(playerChatMessage, playerInfo.getProfile(), packet.chatType());
-            ci.cancel();
-        }
-    }
-
-    @Inject(
-            method = "handleSystemChat(Lnet/minecraft/network/protocol/game/ClientboundSystemChatPacket;)V",
-            at =
-                    @At(
-                            value = "INVOKE",
-                            target =
-                                    "Lnet/minecraft/client/multiplayer/chat/ChatListener;handleSystemMessage(Lnet/minecraft/network/chat/Component;Z)V"),
-            cancellable = true)
-    private void handleSystemChat(ClientboundSystemChatPacket packet, CallbackInfo ci) {
-        if (!isRenderThread()) return;
-
-        Component message = packet.content();
-        ChatPacketReceivedEvent event = packet.overlay()
-                ? new ChatPacketReceivedEvent.GameInfo(message)
-                : new ChatPacketReceivedEvent.System(message);
-        MixinHelper.post(event);
-        if (event.isCanceled()) {
-            ci.cancel();
-            return;
-        }
-
-        if (event.isMessageChanged()) {
-            this.minecraft.getChatListener().handleSystemMessage(event.getMessage(), packet.overlay());
             ci.cancel();
         }
     }
@@ -583,16 +529,16 @@ public abstract class ClientPacketListenerMixin extends ClientCommonPacketListen
     }
 
     @Inject(
-            method = "handleTeleportEntity(Lnet/minecraft/network/protocol/game/ClientboundTeleportEntityPacket;)V",
+            method =
+                    "handleEntityPositionSync(Lnet/minecraft/network/protocol/game/ClientboundEntityPositionSyncPacket;)V",
             at = @At("RETURN"))
-    private void handleTeleportEntity(ClientboundTeleportEntityPacket packet, CallbackInfo ci) {
+    private void handleEntityPositionSync(ClientboundEntityPositionSyncPacket packet, CallbackInfo ci) {
         if (!isRenderThread()) return;
 
-        Entity entity = McUtils.mc().level.getEntity(packet.getId());
+        Entity entity = McUtils.mc().level.getEntity(packet.id());
         if (entity == null) return;
 
-        Vec3 position = new Vec3(packet.getX(), packet.getY(), packet.getZ());
-        MixinHelper.post(new TeleportEntityEvent(entity, position));
+        MixinHelper.post(new EntityPositionSyncEvent(entity, packet.values().position()));
     }
 
     @ModifyArg(
@@ -656,5 +602,20 @@ public abstract class ClientPacketListenerMixin extends ClientCommonPacketListen
 
         MixinHelper.post(
                 new ChunkReceivedEvent(packet.getX(), packet.getZ(), packet.getChunkData(), packet.getLightData()));
+    }
+
+    @Inject(method = "handleLogin(Lnet/minecraft/network/protocol/game/ClientboundLoginPacket;)V", at = @At("RETURN"))
+    private void handleLoginPost(ClientboundLoginPacket packet, CallbackInfo ci) {
+        if (!isRenderThread()) return;
+
+        MixinHelper.postAlways(new ConnectionEvent.ConnectedEvent());
+    }
+
+    @Inject(
+            method = "handlePongResponse(Lnet/minecraft/network/protocol/ping/ClientboundPongResponsePacket;)V",
+            at = @At("RETURN"))
+    private void handlePongResponsePost(ClientboundPongResponsePacket packet, CallbackInfo ci) {
+        PongReceivedEvent event = new PongReceivedEvent(packet.time());
+        MixinHelper.post(event);
     }
 }

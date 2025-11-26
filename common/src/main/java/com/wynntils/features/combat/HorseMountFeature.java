@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.combat;
@@ -13,11 +13,11 @@ import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
-import com.wynntils.core.text.StyledText;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
+import com.wynntils.handlers.chat.event.ChatMessageEvent;
 import com.wynntils.mc.event.UseItemEvent;
 import com.wynntils.models.items.items.game.HorseItem;
 import com.wynntils.utils.mc.McUtils;
+import com.wynntils.utils.mc.MouseUtils;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.ChatFormatting;
@@ -25,14 +25,12 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
 
@@ -43,16 +41,16 @@ public class HorseMountFeature extends Feature {
     private static final SoundEvent HORSE_WHISTLE_SOUND = SoundEvent.createVariableRangeEvent(HORSE_WHISTLE_ID);
 
     private static final int SEARCH_RADIUS = 6; // Furthest blocks away from which we can interact with a horse
-    private static final int SUMMON_ATTEMPTS = 8;
     private static final int SUMMON_DELAY_TICKS = 6;
 
-    private static final List<StyledText> HORSE_ERROR_MESSAGES = List.of(
-            StyledText.fromString("§4There is no room for a horse."),
-            StyledText.fromString("§dYour horse is scared to come out right now, too many mobs are nearby."),
-            StyledText.fromString("§4You cannot interact with your horse at the moment."),
-            StyledText.fromString("§4You cannot use your horse here!"),
-            StyledText.fromString("§4Your horse spawn was disabled (in vanish)!"),
-            StyledText.fromString("§4You can not use a horse while in war."));
+    private static final List<String> HORSE_ERROR_MESSAGES = List.of(
+            "There is no room for a horse.",
+            "Your horse is scared to come out right now, too many mobs are nearby.",
+            "You cannot interact with your horse at the moment.",
+            "You cannot use your horse here!",
+            "Your horse spawn was disabled (in vanish)!",
+            "You can not use a horse while in war.",
+            "You cannot use your vehicle here!");
 
     private int prevItem = -1;
     private boolean alreadySetPrevItem = false;
@@ -62,10 +60,13 @@ public class HorseMountFeature extends Feature {
     private final KeyBind mountHorseKeyBind = new KeyBind("Mount Horse", GLFW.GLFW_KEY_R, true, this::mountHorse);
 
     @Persisted
-    public final Config<Boolean> guaranteedMount = new Config<>(true);
+    private final Config<Boolean> guaranteedMount = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> playWhistle = new Config<>(true);
+    private final Config<Integer> summonAttempts = new Config<>(8);
+
+    @Persisted
+    private final Config<Boolean> playWhistle = new Config<>(true);
 
     @SubscribeEvent
     public void onUseItem(UseItemEvent event) {
@@ -79,13 +80,10 @@ public class HorseMountFeature extends Feature {
         event.setCanceled(true);
     }
 
-    @SubscribeEvent(priority = EventPriority.HIGHEST) // this needs to run before ChatRedirectFeature cancels the event
-    public void onChatReceived(ChatMessageReceivedEvent e) {
-        StyledText message = e.getOriginalStyledText();
-
-        if (HORSE_ERROR_MESSAGES.contains(message)) {
-            cancelMountingHorse = true;
-        }
+    @SubscribeEvent
+    public void onChatReceived(ChatMessageEvent.Match e) {
+        cancelMountingHorse = HORSE_ERROR_MESSAGES.stream()
+                .anyMatch(msg -> e.getMessage().getString().contains(msg));
     }
 
     private void mountHorse() {
@@ -104,7 +102,7 @@ public class HorseMountFeature extends Feature {
                 postHorseErrorMessage(MountHorseStatus.NO_HORSE);
                 return;
             }
-            trySummonAndMountHorse(horseInventorySlot, SUMMON_ATTEMPTS);
+            trySummonAndMountHorse(horseInventorySlot, summonAttempts.get());
         } else { // Horse already exists, mount it
             mountHorse(horse);
         }
@@ -117,7 +115,6 @@ public class HorseMountFeature extends Feature {
         }
 
         // swap to soul points to avoid right click problems
-        int prevItem = McUtils.inventory().selected;
         int nonConflictingSlot = findNonConflictingSlot();
         if (nonConflictingSlot == -1) {
             postHorseErrorMessage(MountHorseStatus.CONFLICTING_SLOTS);
@@ -152,6 +149,7 @@ public class HorseMountFeature extends Feature {
     private void trySummonAndMountHorse(int horseInventorySlot, int attempts) {
         if (attempts <= 0) {
             postHorseErrorMessage(MountHorseStatus.NO_HORSE);
+            McUtils.sendPacket(new ServerboundSetCarriedItemPacket(prevItem));
             return;
         }
 
@@ -179,8 +177,7 @@ public class HorseMountFeature extends Feature {
                         return;
                     }
                     McUtils.sendPacket(new ServerboundSetCarriedItemPacket(horseInventorySlot));
-                    McUtils.sendSequencedPacket(id -> new ServerboundUseItemPacket(
-                            InteractionHand.MAIN_HAND, id, player.getXRot(), player.getYRot()));
+                    MouseUtils.sendRightClickInput();
 
                     trySummonAndMountHorse(horseInventorySlot, attempts - 1);
                 },

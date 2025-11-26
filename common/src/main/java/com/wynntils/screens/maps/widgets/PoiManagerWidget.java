@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.maps.widgets;
@@ -66,15 +66,14 @@ public class PoiManagerWidget extends AbstractWidget {
 
         editButton = new Button.Builder(
                         Component.translatable("screens.wynntils.poiManagementGui.edit"),
-                        (button) -> McUtils.mc().setScreen(PoiCreationScreen.create(managementScreen, poi)))
+                        (button) -> McUtils.setScreen(PoiCreationScreen.create(managementScreen, poi)))
                 .pos(x + width - 20 - (manageButtonsWidth * 2), y)
                 .size(manageButtonsWidth, 20)
                 .build();
 
         deleteButton = new Button.Builder(
-                        Component.translatable("screens.wynntils.poiManagementGui.delete"), (button) -> {
-                            managementScreen.deletePoi(poi);
-                        })
+                        Component.translatable("screens.wynntils.poiManagementGui.delete"),
+                        (button) -> managementScreen.deletePoi(poi, true))
                 .pos(x + width - 20 - manageButtonsWidth, y)
                 .size(manageButtonsWidth, 20)
                 .build();

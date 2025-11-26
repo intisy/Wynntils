@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.maps;
@@ -51,9 +51,9 @@ public abstract class AbstractMapScreen extends WynntilsScreen {
             MultiBufferSource.immediate(new ByteBufferBuilder(256));
 
     protected static final float SCREEN_SIDE_OFFSET = 10;
+    protected static final int MAP_CENTER_X = -360;
+    protected static final int MAP_CENTER_Z = -3000;
     private static final float BORDER_OFFSET = 6;
-    private static final int MAP_CENTER_X = -400;
-    private static final int MAP_CENTER_Z = -1700;
     private static final int MAX_X = 1650;
     private static final int MAX_Z = -150;
     private static final int MIN_X = -2400;
@@ -148,10 +148,6 @@ public abstract class AbstractMapScreen extends WynntilsScreen {
                 renderHeight,
                 Texture.FULLSCREEN_MAP_BORDER.width(),
                 Texture.FULLSCREEN_MAP_BORDER.height());
-    }
-
-    protected void renderGradientBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
     }
 
     protected void renderPois(
@@ -356,10 +352,15 @@ public abstract class AbstractMapScreen extends WynntilsScreen {
         MapRenderer.renderCursor(poseStack, cursorX, cursorZ, pointerScale, pointerColor, pointerType, false);
     }
 
-    protected void renderMap(PoseStack poseStack) {
+    protected void renderMap(GuiGraphics guiGraphics) {
+        PoseStack poseStack = guiGraphics.pose();
+
         RenderUtils.enableScissor(
-                (int) (renderX + renderedBorderXOffset), (int) (renderY + renderedBorderYOffset), (int) mapWidth, (int)
-                        mapHeight);
+                guiGraphics,
+                (int) (renderX + renderedBorderXOffset),
+                (int) (renderY + renderedBorderYOffset),
+                (int) mapWidth,
+                (int) mapHeight);
 
         // Background black void color
         RenderUtils.drawRect(
@@ -395,7 +396,7 @@ public abstract class AbstractMapScreen extends WynntilsScreen {
 
         BUFFER_SOURCE.endBatch();
 
-        RenderUtils.disableScissor();
+        RenderUtils.disableScissor(guiGraphics);
     }
 
     protected void renderChunkBorders(PoseStack poseStack) {
@@ -450,7 +451,7 @@ public abstract class AbstractMapScreen extends WynntilsScreen {
         this.zoomRenderScale = MapRenderer.getZoomRenderScaleFromLevel(this.zoomLevel);
     }
 
-    protected void adjustZoomLevel(float delta) {
+    private void adjustZoomLevel(float delta) {
         setZoomLevel(zoomLevel + delta);
     }
 

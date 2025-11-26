@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.handlers.container;
@@ -64,7 +64,7 @@ public final class ContainerQueryHandler extends Handler {
             return;
         }
 
-        Screen screen = McUtils.mc().screen;
+        Screen screen = McUtils.screen();
         if (screen instanceof AbstractContainerScreen) {
             // Another inventory screen is already open, cannot do this
             firstStep.onError("Another container screen is already open");
@@ -119,7 +119,7 @@ public final class ContainerQueryHandler extends Handler {
         // Silence the menu click sound when we are processing query
         if (currentStep == null) return;
         if (e.getSource() != SoundSource.BLOCKS) return;
-        if (!e.getSound().getLocation().toLanguageKey().equals(MENU_CLICK_SOUND)) return;
+        if (!e.getSound().location().toLanguageKey().equals(MENU_CLICK_SOUND)) return;
 
         e.setCanceled(true);
         return;

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.items.encoding;
@@ -26,7 +26,7 @@ import com.wynntils.models.items.encoding.impl.block.CustomGearTypeTransformer;
 import com.wynntils.models.items.encoding.impl.block.CustomIdentificationDataTransformer;
 import com.wynntils.models.items.encoding.impl.block.DamageDataTransformer;
 import com.wynntils.models.items.encoding.impl.block.DefenseDataTransformer;
-import com.wynntils.models.items.encoding.impl.block.DurablityDataTransformer;
+import com.wynntils.models.items.encoding.impl.block.DurabilityDataTransformer;
 import com.wynntils.models.items.encoding.impl.block.EffectsDataTransformer;
 import com.wynntils.models.items.encoding.impl.block.EndDataTransformer;
 import com.wynntils.models.items.encoding.impl.block.IdentificationDataTransformer;
@@ -74,7 +74,7 @@ public final class DataTransformerRegistry {
 
                 bytes.addAll(Arrays.asList(errorOrEncodedData.getValue()));
             } catch (Exception e) {
-                return ErrorOr.error("Failed to encode data class "
+                return ErrorOr.<EncodedByteBuffer>error("Failed to encode data class "
                                 + itemData.getClass().getSimpleName() + "!")
                         .logged();
             }
@@ -98,7 +98,7 @@ public final class DataTransformerRegistry {
     private ErrorOr<UnsignedByte[]> encodeData(ItemTransformingVersion version, ItemData data) {
         DataTransformer<ItemData> dataTransformer = (DataTransformer<ItemData>) dataTransformers.get(data.getClass());
         if (dataTransformer == null) {
-            return ErrorOr.error(
+            return ErrorOr.<UnsignedByte[]>error(
                             "No data transformer found for " + data.getClass().getSimpleName())
                     .logged();
         }
@@ -116,7 +116,7 @@ public final class DataTransformerRegistry {
                 DataTransformer<ItemData> dataTransformer = dataTransformers.get(dataBlockId.toByte());
 
                 if (dataTransformer == null) {
-                    return ErrorOr.error("No data transformer found for id " + dataBlockId.value())
+                    return ErrorOr.<List<ItemData>>error("No data transformer found for id " + dataBlockId.value())
                             .logged();
                 }
 
@@ -128,7 +128,7 @@ public final class DataTransformerRegistry {
 
                 dataList.add(errorOrData.getValue());
             } catch (Exception e) {
-                return ErrorOr.error("Failed to decode data block with id " + dataBlockId.value() + "!")
+                return ErrorOr.<List<ItemData>>error("Failed to decode data block with id " + dataBlockId.value() + "!")
                         .logged();
             }
         }
@@ -157,7 +157,7 @@ public final class DataTransformerRegistry {
         registerDataTransformer(RerollData.class, new RerollDataTransformer());
         registerDataTransformer(ShinyData.class, new ShinyDataTransformer());
         registerDataTransformer(CustomGearTypeData.class, new CustomGearTypeTransformer());
-        registerDataTransformer(DurabilityData.class, new DurablityDataTransformer());
+        registerDataTransformer(DurabilityData.class, new DurabilityDataTransformer());
         registerDataTransformer(RequirementsData.class, new RequirementsDataTransformer());
         registerDataTransformer(DamageData.class, new DamageDataTransformer());
         registerDataTransformer(DefenseData.class, new DefenseDataTransformer());

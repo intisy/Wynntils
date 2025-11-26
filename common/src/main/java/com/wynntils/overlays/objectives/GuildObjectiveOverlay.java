@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.objectives;
@@ -24,16 +24,17 @@ import com.wynntils.utils.render.buffered.BufferedRenderUtils;
 import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.VerticalAlignment;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public class GuildObjectiveOverlay extends ObjectiveOverlayBase {
     @Persisted
-    public final Config<Boolean> disableObjectiveTrackingOnScoreboard = new Config<>(true);
+    private final Config<Boolean> disableObjectiveTrackingOnScoreboard = new Config<>(true);
 
     @Persisted(i18nKey = "feature.wynntils.objectivesOverlay.overlay.objectiveOverlayBase.textColor")
-    public final Config<CustomColor> textColor = new Config<>(CommonColors.LIGHT_BLUE);
+    private final Config<CustomColor> textColor = new Config<>(CommonColors.LIGHT_BLUE);
 
     public GuildObjectiveOverlay() {
         super(
@@ -58,10 +59,31 @@ public class GuildObjectiveOverlay extends ObjectiveOverlayBase {
     }
 
     @Override
-    public void render(PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
-        WynnObjective guildObjective = Models.Objectives.getGuildObjective();
+    protected boolean isVisible() {
+        return Models.Objectives.getGuildObjective() != null;
+    }
 
+    @Override
+    public void render(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        WynnObjective guildObjective = Models.Objectives.getGuildObjective();
         if (guildObjective == null) return;
+        renderObjective(guiGraphics, bufferSource, guildObjective);
+    }
+
+    @Override
+    public void renderPreview(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        WynnObjective guildObjective = Models.Objectives.getGuildObjective();
+        if (guildObjective == null) {
+            guildObjective = WynnObjective.DEMO_GUILD;
+        }
+        renderObjective(guiGraphics, bufferSource, guildObjective);
+    }
+
+    private void renderObjective(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, WynnObjective guildObjective) {
+        PoseStack poseStack = guiGraphics.pose();
 
         if (this.hideOnInactivity.get()) {
             final int maxInactivityMs = 3000;
@@ -120,7 +142,4 @@ public class GuildObjectiveOverlay extends ObjectiveOverlayBase {
                     guildObjective.getProgress());
         }
     }
-
-    @Override
-    protected void onConfigUpdate(Config<?> config) {}
 }

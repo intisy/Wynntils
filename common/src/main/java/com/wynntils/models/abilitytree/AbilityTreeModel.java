@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.abilitytree;
@@ -7,9 +7,8 @@ package com.wynntils.models.abilitytree;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Model;
-import com.wynntils.core.net.Download;
+import com.wynntils.core.net.DownloadRegistry;
 import com.wynntils.core.net.UrlId;
 import com.wynntils.models.abilitytree.parser.AbilityTreeParser;
 import com.wynntils.models.abilitytree.type.AbilityTreeInfo;
@@ -22,24 +21,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class AbilityTreeModel extends Model {
+public final class AbilityTreeModel extends Model {
     public static final int ABILITY_TREE_PAGES = 7;
     public static final AbilityTreeParser ABILITY_TREE_PARSER = new AbilityTreeParser();
     public static final AbilityTreeContainerQueries ABILITY_TREE_CONTAINER_QUERIES = new AbilityTreeContainerQueries();
 
-    private Map<ClassType, AbilityTreeInfo> abiliiyTreeMap = new HashMap<>();
+    private Map<ClassType, AbilityTreeInfo> abilityTreeMap = new HashMap<>();
     private ParsedAbilityTree currentAbilityTree;
 
     public AbilityTreeModel() {
         super(List.of());
-
-        reloadData();
     }
 
     @Override
-    public void reloadData() {
-        Download dl = Managers.Net.download(UrlId.DATA_STATIC_ABILITIES);
-        dl.handleReader(reader -> {
+    public void registerDownloads(DownloadRegistry registry) {
+        registry.registerDownload(UrlId.DATA_STATIC_ABILITIES).handleReader(reader -> {
             Type type = new TypeToken<HashMap<String, AbilityTreeInfo>>() {}.getType();
             Gson gson = new GsonBuilder().create();
 
@@ -49,7 +45,7 @@ public class AbilityTreeModel extends Model {
 
             abilityMap.forEach((key, value) -> tempMap.put(ClassType.fromName(key), value));
 
-            abiliiyTreeMap = tempMap;
+            abilityTreeMap = tempMap;
         });
     }
 
@@ -70,6 +66,6 @@ public class AbilityTreeModel extends Model {
     }
 
     public AbilityTreeInfo getAbilityTree(ClassType type) {
-        return abiliiyTreeMap.get(type);
+        return abilityTreeMap.get(type);
     }
 }

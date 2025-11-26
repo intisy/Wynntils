@@ -1,16 +1,16 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.services.leaderboard;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Service;
 import com.wynntils.core.net.ApiResponse;
 import com.wynntils.core.net.UrlId;
-import com.wynntils.models.worlds.event.WorldStateEvent;
-import com.wynntils.models.worlds.type.WorldState;
 import com.wynntils.services.leaderboard.type.LeaderboardBadge;
 import com.wynntils.services.leaderboard.type.LeaderboardType;
 import java.util.ArrayList;
@@ -18,22 +18,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import net.neoforged.bus.api.SubscribeEvent;
 
 public class LeaderboardService extends Service {
-    private Map<UUID, List<LeaderboardBadge>> leaderboard = new HashMap<>();
+    private Map<UUID, List<LeaderboardBadge>> playerLeaderboards = new HashMap<>();
+    private Map<String, List<LeaderboardBadge>> guildLeaderboards = new HashMap<>();
 
     public LeaderboardService() {
         super(List.of());
-
-        reloadData();
-    }
-
-    @SubscribeEvent
-    public void onWorldStateChange(WorldStateEvent event) {
-        if (event.getNewState() != WorldState.HUB && event.getNewState() != WorldState.CONNECTING) return;
-
-        updateLeaderboards();
     }
 
     @Override
@@ -41,26 +32,45 @@ public class LeaderboardService extends Service {
         updateLeaderboards();
     }
 
-    public List<LeaderboardBadge> getBadges(UUID id) {
-        return leaderboard.getOrDefault(id, List.of());
+    public List<LeaderboardBadge> getPlayerBadges(UUID id) {
+        return playerLeaderboards.getOrDefault(id, List.of());
     }
 
     private void updateLeaderboards() {
-        leaderboard = new HashMap<>();
+        playerLeaderboards = new HashMap<>();
+        guildLeaderboards = new HashMap<>();
 
-        for (LeaderboardType type : LeaderboardType.values()) {
-            ApiResponse apiResponse =
-                    Managers.Net.callApi(UrlId.DATA_WYNNCRAFT_LEADERBOARD, Map.of("type", type.getKey()));
-            apiResponse.handleJsonObject(json -> {
-                for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
-                    UUID uuid = UUID.fromString(
-                            entry.getValue().getAsJsonObject().get("uuid").getAsString());
-                    List<LeaderboardBadge> badges = leaderboard.getOrDefault(uuid, new ArrayList<>());
+        ApiResponse apiResponse = Managers.Net.callApi(UrlId.DATA_ATHENA_LEADERBOARD);
+        apiResponse.handleJsonObject(json -> {
+            for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
+                LeaderboardType type = LeaderboardType.fromKey(entry.getKey());
 
-                    badges.add(LeaderboardBadge.from(type, Integer.parseInt(entry.getKey())));
-                    leaderboard.put(uuid, badges);
+                if (type == null) {
+                    WynntilsMod.warn("Unknown leaderboard type: " + entry.getKey());
+                    continue;
                 }
-            });
-        }
+
+                JsonObject leaderboard = entry.getValue().getAsJsonObject();
+
+                for (Map.Entry<String, JsonElement> rank : leaderboard.entrySet()) {
+                    String value = rank.getValue().getAsString();
+
+                    if (value.equals("redacted")) continue;
+
+                    if (type.isGuildLeaderboard()) {
+                        List<LeaderboardBadge> badges = guildLeaderboards.getOrDefault(value, new ArrayList<>());
+
+                        badges.add(LeaderboardBadge.from(type, Integer.parseInt(rank.getKey())));
+                        guildLeaderboards.put(value, badges);
+                    } else {
+                        UUID uuid = UUID.fromString(value);
+                        List<LeaderboardBadge> badges = playerLeaderboards.getOrDefault(uuid, new ArrayList<>());
+
+                        badges.add(LeaderboardBadge.from(type, Integer.parseInt(rank.getKey())));
+                        playerLeaderboards.put(uuid, badges);
+                    }
+                }
+            }
+        });
     }
 }

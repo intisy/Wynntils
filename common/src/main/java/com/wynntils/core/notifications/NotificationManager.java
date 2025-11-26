@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.notifications;
@@ -44,7 +44,6 @@ public final class NotificationManager extends Manager {
     public MessageContainer queueMessage(TextRenderTask message) {
         if (!Managers.Connection.onServer()) return null;
 
-        WynntilsMod.info("Message Queued: " + message);
         MessageContainer msgContainer = new MessageContainer(message);
         StyledText messageText = message.getText();
 
@@ -85,8 +84,6 @@ public final class NotificationManager extends Manager {
 
         // If the message is the same, don't do anything
         if (oldMessage.equals(newMessage)) return msgContainer;
-
-        WynntilsMod.info("Message Edited: " + msgContainer.getRenderTask() + " -> " + newMessage.getString());
 
         // If we have multiple repeated messages, we want to only edit the last one.
         Component oldComponent = msgContainer.getRenderTask().getText().getComponent();

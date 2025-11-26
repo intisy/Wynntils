@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.combat;
@@ -17,6 +17,7 @@ import com.wynntils.models.spells.event.SpellEvent;
 import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.render.RenderUtils;
 import com.wynntils.utils.type.CappedValue;
+import java.util.Optional;
 import net.neoforged.bus.api.SubscribeEvent;
 
 @ConfigCategory(Category.COMBAT)
@@ -24,23 +25,27 @@ public class SpellCastVignetteFeature extends Feature {
     private static final int SHOW_VIGNETTE_TICKS = 40;
 
     @Persisted
-    public final Config<Boolean> renderVignette = new Config<>(true);
+    private final Config<Boolean> renderVignette = new Config<>(true);
 
     @Persisted
-    public final Config<Integer> vignetteFadeTime = new Config<>(12);
+    private final Config<Integer> vignetteFadeTime = new Config<>(12);
 
     @Persisted
-    public final Config<Float> vignetteIntensity = new Config<>(0.75f);
+    private final Config<Float> vignetteIntensity = new Config<>(0.75f);
 
     @Persisted
-    public final Config<CustomColor> vignetteColor = new Config<>(new CustomColor(0, 71, 201));
+    private final Config<Float> maxIntensityPercent = new Config<>(100f);
+
+    @Persisted
+    private final Config<CustomColor> vignetteColor = new Config<>(new CustomColor(0, 71, 201));
 
     private int vignetteTimer;
     private float intensity;
 
     @SubscribeEvent
     public void onSpellCast(SpellEvent.Cast event) {
-        if (Models.CharacterStats.getMana() == CappedValue.EMPTY) {
+        Optional<CappedValue> manaOpt = Models.CharacterStats.getMana();
+        if (manaOpt.isEmpty()) {
             WynntilsMod.warn("Mana is empty, cannot calculate relative cost of spell cast");
             return;
         }
@@ -48,9 +53,11 @@ public class SpellCastVignetteFeature extends Feature {
         // If the spell costs no mana, don't show the vignette
         if (event.getManaCost() == 0) return;
 
+        // Make sure the current mana is never 0 so the whole screen won't be covered in solid blue
+        int currentMana = Math.max(1, manaOpt.get().current());
+
         // An relativeCost of 1.0 means we just used all mana we have left
-        float relativeCost =
-                (float) event.getManaCost() / Models.CharacterStats.getMana().current();
+        float relativeCost = Math.min((float) event.getManaCost() / currentMana, maxIntensityPercent.get() / 100);
         intensity = vignetteIntensity.get() * relativeCost;
         vignetteTimer = SHOW_VIGNETTE_TICKS;
     }

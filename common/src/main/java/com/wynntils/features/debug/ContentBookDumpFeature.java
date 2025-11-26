@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.debug;
@@ -21,6 +21,7 @@ import com.wynntils.models.activities.type.ActivityDifficulty;
 import com.wynntils.models.activities.type.ActivityInfo;
 import com.wynntils.models.activities.type.ActivityLength;
 import com.wynntils.models.activities.type.ActivityRequirements;
+import com.wynntils.models.activities.type.ActivityRewardType;
 import com.wynntils.models.activities.type.ActivityType;
 import com.wynntils.models.profession.type.ProfessionType;
 import com.wynntils.utils.EnumUtils;
@@ -50,7 +51,7 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
 
-// Note: To run this sucessfully, you have to have a class with all content trackable in the content book
+// Note: To run this successfully, you have to have a class with all content trackable in the content book
 @StartDisabled
 @ConfigCategory(Category.DEBUG)
 public class ContentBookDumpFeature extends Feature {
@@ -87,7 +88,7 @@ public class ContentBookDumpFeature extends Feature {
 
         Location currentTracker = spawnLocationOpt.get();
 
-        if (lastTrackedLocation != currentTracker && currentTracker != null) {
+        if (lastTrackedLocation != currentTracker) {
             currentDump.remove(currentlyTracking);
 
             currentDump.add(new DumpableActivityInfo(
@@ -235,7 +236,7 @@ public class ContentBookDumpFeature extends Feature {
             String lengthInfo,
             ActivityDifficulty difficulty,
             DumpableActivityRequirements requirements,
-            List<String> rewards,
+            Map<ActivityRewardType, List<String>> rewards,
             Location location) {
         private static DumpableActivityInfo fromActivityInfo(ActivityInfo activityInfo) {
             return new DumpableActivityInfo(
@@ -247,7 +248,10 @@ public class ContentBookDumpFeature extends Feature {
                     activityInfo.lengthInfo().orElse(""),
                     activityInfo.difficulty().orElse(null),
                     DumpableActivityRequirements.fromActivityRequirements(activityInfo.requirements()),
-                    activityInfo.rewards(),
+                    activityInfo.rewards().entrySet().stream()
+                            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream()
+                                    .map(StyledText::getString)
+                                    .toList())),
                     StyledTextUtils.extractLocation(activityInfo.description().orElse(StyledText.EMPTY))
                             .orElse(null));
         }

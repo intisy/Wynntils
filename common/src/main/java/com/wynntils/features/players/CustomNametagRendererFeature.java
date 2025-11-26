@@ -1,9 +1,10 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.players;
 
+import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.components.Services;
 import com.wynntils.core.consumers.features.Feature;
@@ -11,30 +12,40 @@ import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
-import com.wynntils.core.text.PartStyle;
-import com.wynntils.core.text.StyledText;
+import com.wynntils.features.tooltips.ItemStatInfoFeature;
 import com.wynntils.mc.event.EntityNameTagRenderEvent;
+import com.wynntils.mc.event.GetCameraEntityEvent;
 import com.wynntils.mc.event.PlayerNametagRenderEvent;
 import com.wynntils.mc.event.RenderLevelEvent;
-import com.wynntils.models.gear.type.GearInfo;
+import com.wynntils.mc.extension.EntityRenderStateExtension;
+import com.wynntils.models.inventory.type.InventoryAccessory;
+import com.wynntils.models.inventory.type.InventoryArmor;
+import com.wynntils.models.items.WynnItem;
+import com.wynntils.models.items.items.game.CraftedGearItem;
+import com.wynntils.models.items.items.game.GearItem;
 import com.wynntils.models.players.WynntilsUser;
 import com.wynntils.models.players.type.AccountType;
-import com.wynntils.screens.gearviewer.GearViewerScreen;
+import com.wynntils.screens.playerviewer.PlayerViewerScreen;
+import com.wynntils.services.hades.HadesUser;
 import com.wynntils.services.leaderboard.type.LeaderboardBadge;
 import com.wynntils.utils.mc.McUtils;
 import com.wynntils.utils.render.RenderUtils;
 import com.wynntils.utils.render.Texture;
-import com.wynntils.utils.wynn.ItemUtils;
+import com.wynntils.utils.wynn.ColorScaleUtils;
 import com.wynntils.utils.wynn.RaycastUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 
 @ConfigCategory(Category.PLAYERS)
@@ -44,37 +55,47 @@ public class CustomNametagRendererFeature extends Feature {
     private static final float NAMETAG_HEIGHT = 0.25875f;
     private static final float BADGE_MARGIN = 2;
     private static final int BADGE_SCROLL_SPEED = 40;
-    private static final String WYNNTILS_LOGO = "⛨"; // Well, at least it's a shield...
+    private static final ResourceLocation WYNNTILS_NAMETAG_LOGO_FONT =
+            ResourceLocation.fromNamespaceAndPath("wynntils", "nametag");
+    private static final String WYNNTILS_NAMETAG_LOGO = "\uE100";
 
     @Persisted
-    public final Config<Boolean> hideAllNametags = new Config<>(false);
+    private final Config<Boolean> hideAllNametags = new Config<>(false);
 
     @Persisted
-    public final Config<Boolean> hidePlayerNametags = new Config<>(false);
+    private final Config<Boolean> showOwnNametag = new Config<>(false);
 
     @Persisted
-    public final Config<Boolean> hideNametagBackground = new Config<>(false);
+    private final Config<Boolean> hidePlayerNametags = new Config<>(false);
 
     @Persisted
-    public final Config<Boolean> showLeaderboardBadges = new Config<>(true);
+    private final Config<Boolean> hideNametagBackground = new Config<>(false);
 
     @Persisted
-    public final Config<Integer> badgeCount = new Config<>(7);
+    private final Config<Boolean> showLeaderboardBadges = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> showGearOnHover = new Config<>(true);
+    private final Config<Integer> badgeCount = new Config<>(7);
 
     @Persisted
-    public final Config<Boolean> showWynntilsMarker = new Config<>(true);
+    private final Config<Boolean> showGearOnHover = new Config<>(true);
 
     @Persisted
-    public final Config<Float> customNametagScale = new Config<>(0.5f);
+    private final Config<Boolean> showGearPercentage = new Config<>(true);
+
+    @Persisted
+    private final Config<Boolean> showWynntilsMarker = new Config<>(true);
+
+    @Persisted
+    private final Config<Float> customNametagScale = new Config<>(0.5f);
 
     private Player hitPlayerCache = null;
 
     @SubscribeEvent
     public void onPlayerNameTagRender(PlayerNametagRenderEvent event) {
-        if (Models.Player.isNpc(event.getEntity())) return;
+        Entity entity = ((EntityRenderStateExtension) event.getEntityRenderState()).getEntity();
+        if (!(entity instanceof AbstractClientPlayer player)) return;
+        if (Models.Player.isNpc(player)) return;
 
         if (hidePlayerNametags.get()) {
             event.setCanceled(true);
@@ -82,8 +103,8 @@ public class CustomNametagRendererFeature extends Feature {
         }
 
         // If we are viewing this player's gears, do not show plus info
-        if (McUtils.mc().screen instanceof GearViewerScreen gearViewerScreen
-                && gearViewerScreen.getPlayer() == event.getEntity()) {
+        if (McUtils.screen() instanceof PlayerViewerScreen playerViewerScreen
+                && playerViewerScreen.getPlayer() == player) {
             return;
         }
 
@@ -117,44 +138,93 @@ public class CustomNametagRendererFeature extends Feature {
     }
 
     @SubscribeEvent
+    public void onCameraCheck(GetCameraEntityEvent e) {
+        if (!showOwnNametag.get()) return;
+        // Only render when a screen is not open or in the chat screen
+        if (McUtils.screen() != null && !(McUtils.screen() instanceof ChatScreen)) return;
+
+        // We don't need to check if the entity is the local player as that is already done in
+        // LivingEntityRenderer.shouldShowName
+        e.setEntity(null);
+    }
+
+    @SubscribeEvent
     public void onRenderLevel(RenderLevelEvent.Pre event) {
         Optional<Player> hitPlayer = RaycastUtils.getHoveredPlayer();
         hitPlayerCache = hitPlayer.orElse(null);
     }
 
     private void addGearNametags(PlayerNametagRenderEvent event, List<CustomNametag> nametags) {
-        LocalPlayer player = McUtils.player();
+        Entity entity = ((EntityRenderStateExtension) event.getEntityRenderState()).getEntity();
+        if (!(entity instanceof AbstractClientPlayer player)) return;
+        LocalPlayer localPlayer = McUtils.player();
 
-        if (hitPlayerCache != event.getEntity()) return;
+        if (hitPlayerCache != player) return;
+        if (!Models.Player.isLocalPlayer(localPlayer)) return;
 
-        if (!Models.Player.isLocalPlayer(player)) return;
+        Optional<HadesUser> hadesUserOpt = Services.Hades.getHadesUser(hitPlayerCache.getUUID());
+        if (hadesUserOpt.isEmpty()) return;
 
-        ItemStack heldItem = hitPlayerCache.getMainHandItem();
-        MutableComponent handComp = getItemComponent(heldItem);
-        if (handComp != null) nametags.add(new CustomNametag(handComp, customNametagScale.get()));
+        MutableComponent handComp = getItemComponent(hadesUserOpt.get().getHeldItem(), showGearPercentage.get());
+        if (handComp != null) {
+            nametags.add(new CustomNametag(handComp, customNametagScale.get()));
+        }
 
-        for (ItemStack armorStack : hitPlayerCache.getArmorSlots()) {
-            MutableComponent armorComp = getItemComponent(armorStack);
-            if (armorComp != null) nametags.add(new CustomNametag(armorComp, customNametagScale.get()));
+        for (InventoryAccessory accessory : hadesUserOpt.get().getAccessories().descendingKeySet()) {
+            MutableComponent accessoryComp =
+                    getItemComponent(hadesUserOpt.get().getAccessories().get(accessory), showGearPercentage.get());
+            if (accessoryComp != null) {
+                nametags.add(new CustomNametag(accessoryComp, customNametagScale.get()));
+            }
+        }
+
+        for (InventoryArmor armor : hadesUserOpt.get().getArmor().descendingKeySet()) {
+            MutableComponent armorComp =
+                    getItemComponent(hadesUserOpt.get().getArmor().get(armor), showGearPercentage.get());
+            if (armorComp != null) {
+                nametags.add(new CustomNametag(armorComp, customNametagScale.get()));
+            }
         }
     }
 
-    private static MutableComponent getItemComponent(ItemStack itemStack) {
-        if (itemStack == null || itemStack == ItemStack.EMPTY) return null;
+    private static MutableComponent getItemComponent(WynnItem wynnItem, boolean showGearPercentage) {
+        if (wynnItem == null) return null;
 
-        // This must specifically NOT be normalized; the ֎ is significant
-        String gearName = StyledText.fromComponent(itemStack.getHoverName()).getStringWithoutFormatting();
-        MutableComponent description = ItemUtils.getNonGearDescription(itemStack, gearName);
-        if (description != null) return description;
+        if (wynnItem instanceof GearItem gearItem) {
+            String itemName = gearItem.getItemInfo().name();
+            MutableComponent gearComponent = Component.literal(itemName)
+                    .withStyle(gearItem.getItemInfo().tier().getChatFormatting());
 
-        GearInfo gearInfo = Models.Gear.getGearInfoFromApiName(gearName);
-        if (gearInfo == null) return null;
+            if (gearItem.getShinyStat().isPresent()) {
+                gearComponent = Component.literal("⬡ ")
+                        .append(Component.literal("Shiny ")
+                                .withStyle(gearItem.getItemInfo().tier().getChatFormatting()))
+                        .append(gearComponent);
+            }
 
-        return Component.literal(gearInfo.name()).withStyle(gearInfo.tier().getChatFormatting());
+            if (showGearPercentage && gearItem.hasOverallValue()) {
+                ItemStatInfoFeature isif = Managers.Feature.getFeatureInstance(ItemStatInfoFeature.class);
+                gearComponent.append(ColorScaleUtils.getPercentageTextComponent(
+                        isif.getColorMap(),
+                        gearItem.getOverallPercentage(),
+                        isif.colorLerp.get(),
+                        isif.decimalPlaces.get()));
+            }
+
+            return gearComponent;
+        } else if (wynnItem instanceof CraftedGearItem craftedGearItem) {
+            return Component.literal(craftedGearItem.getName())
+                    .withStyle(craftedGearItem.getGearTier().getChatFormatting());
+        }
+
+        return null;
     }
 
     private void addAccountTypeNametag(PlayerNametagRenderEvent event, List<CustomNametag> nametags) {
-        WynntilsUser user = Models.Player.getUser(event.getEntity().getUUID());
+        Entity entity = ((EntityRenderStateExtension) event.getEntityRenderState()).getEntity();
+        if (!(entity instanceof AbstractClientPlayer player)) return;
+
+        WynntilsUser user = Models.Player.getWynntilsUser(player);
         if (user == null) {
             if (!nametags.isEmpty()) {
                 // We will cancel vanilla rendering, so we must add back the normal vanilla base nametag
@@ -170,26 +240,33 @@ public class CustomNametagRendererFeature extends Feature {
                     new CustomNametag(accountType.getComponent(), customNametagScale.get() * ACCOUNT_TYPE_MULTIPLIER));
         }
 
-        // Add an appropriate Wynntils marker
-        Component realName = event.getDisplayName();
-        Component vanillaNametag = realName;
-
-        if (showWynntilsMarker.get()) {
-            StyledText styledText = StyledText.fromComponent(realName);
-            if (styledText.getString(PartStyle.StyleType.NONE).startsWith("[")) {
-                vanillaNametag = Component.literal(WYNNTILS_LOGO)
-                        .withStyle(ChatFormatting.DARK_GRAY)
-                        .append(realName);
-            } else {
-                vanillaNametag = Component.literal(WYNNTILS_LOGO + " ")
-                        .withStyle(ChatFormatting.GRAY)
-                        .append(realName);
-            }
+        if (!showWynntilsMarker.get()) {
+            // We will cancel vanilla rendering, so we must add back the normal vanilla base nametag
+            Component realName = event.getDisplayName();
+            nametags.add(new CustomNametag(realName, 1f));
+            return;
         }
-        nametags.add(new CustomNametag(vanillaNametag, 1f));
+
+        // Add an appropriate Wynntils marker
+        ChatFormatting logoColor;
+        if (Models.Player.isLocalPlayer(player)) {
+            logoColor = ChatFormatting.WHITE;
+        } else {
+            logoColor = ChatFormatting.GRAY;
+        }
+        Component prefixedName = Component.empty()
+                .append(Component.literal(WYNNTILS_NAMETAG_LOGO)
+                        .withStyle(
+                                Style.EMPTY.withFont(WYNNTILS_NAMETAG_LOGO_FONT).withColor(logoColor)))
+                .append(" ")
+                .append(event.getDisplayName());
+        nametags.add(new CustomNametag(prefixedName, 1f));
     }
 
     private void drawNametags(PlayerNametagRenderEvent event, List<CustomNametag> nametags) {
+        Entity entity = ((EntityRenderStateExtension) event.getEntityRenderState()).getEntity();
+        if (!(entity instanceof AbstractClientPlayer player)) return;
+
         // calculate color of nametag box
         int backgroundColor =
                 hideNametagBackground.get() ? 0 : ((int) (McUtils.options().getBackgroundOpacity(0.25F) * 255f) << 24);
@@ -205,7 +282,7 @@ public class CustomNametagRendererFeature extends Feature {
                     event.getPackedLight(),
                     backgroundColor,
                     event.getEntityRenderDispatcher(),
-                    event.getEntity(),
+                    player,
                     nametag.nametagComponent(),
                     event.getFont(),
                     nametag.nametagScale(),
@@ -218,9 +295,10 @@ public class CustomNametagRendererFeature extends Feature {
     private void drawBadges(PlayerNametagRenderEvent event, float height) {
         if (!showLeaderboardBadges.get()) return;
         if (badgeCount.get() <= 0) return;
+        Entity entity = ((EntityRenderStateExtension) event.getEntityRenderState()).getEntity();
+        if (!(entity instanceof AbstractClientPlayer player)) return;
 
-        List<LeaderboardBadge> allBadges =
-                Services.Leaderboard.getBadges(event.getEntity().getUUID());
+        List<LeaderboardBadge> allBadges = Services.Leaderboard.getPlayerBadges(Models.Player.getUserUUID(player));
 
         if (allBadges.isEmpty()) return;
 
@@ -246,7 +324,7 @@ public class CustomNametagRendererFeature extends Feature {
             RenderUtils.renderProfessionBadge(
                     event.getPoseStack(),
                     event.getEntityRenderDispatcher(),
-                    event.getEntity(),
+                    player,
                     Texture.LEADERBOARD_BADGES.resource(),
                     LeaderboardBadge.WIDTH,
                     LeaderboardBadge.HEIGHT,

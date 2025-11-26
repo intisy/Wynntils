@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils.colors;
@@ -11,6 +11,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 import com.wynntils.utils.MathUtils;
+import java.awt.Color;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -22,27 +23,15 @@ import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 import net.minecraft.ChatFormatting;
 
-public class CustomColor {
+public record CustomColor(int r, int g, int b, int a) {
     public static final CustomColor NONE = new CustomColor(-1, -1, -1, -1);
 
     private static final Pattern HEX_PATTERN = Pattern.compile("#?([0-9a-fA-F]{6})([0-9a-fA-F]{2})?");
     private static final Pattern STRING_PATTERN = Pattern.compile("rgba\\((\\d+),(\\d+),(\\d+),(\\d+)\\)");
     private static final Map<String, CustomColor> REGISTERED_HASHED_COLORS = new HashMap<>();
 
-    public final int r;
-    public final int g;
-    public final int b;
-    public final int a;
-
     public CustomColor(int r, int g, int b) {
         this(r, g, b, 255);
-    }
-
-    public CustomColor(int r, int g, int b, int a) {
-        this.r = r;
-        this.g = g;
-        this.b = b;
-        this.a = a;
     }
 
     public CustomColor(float r, float g, float b) {
@@ -50,10 +39,7 @@ public class CustomColor {
     }
 
     public CustomColor(float r, float g, float b, float a) {
-        this.r = (int) (r * 255);
-        this.g = (int) (g * 255);
-        this.b = (int) (b * 255);
-        this.a = (int) (a * 255);
+        this((int) (r * 255), (int) (g * 255), (int) (b * 255), (int) (a * 255));
     }
 
     public CustomColor(CustomColor color) {
@@ -64,23 +50,28 @@ public class CustomColor {
         this(color.r, color.g, color.b, alpha);
     }
 
+    /**
+     * This String-based constructor is implicitly called from {@link Config#tryParseStringValue}.
+     */
     public CustomColor(String toParse) {
+        // Until we upgrade to Java 23 and get https://openjdk.org/jeps/513 we need this clunky workaround
+        this(
+                fromStringWithHex(toParse).r(),
+                fromStringWithHex(toParse).g(),
+                fromStringWithHex(toParse).b(),
+                fromStringWithHex(toParse).a());
+    }
+
+    public static CustomColor fromStringWithHex(String toParse) {
         String noSpace = toParse.replace(" ", "");
 
-        CustomColor parseTry = CustomColor.fromString(noSpace);
+        CustomColor fromString = CustomColor.fromString(noSpace);
+        if (fromString != CustomColor.NONE) return fromString;
 
-        if (parseTry == CustomColor.NONE) {
-            parseTry = CustomColor.fromHexString(noSpace);
+        CustomColor fromHex = CustomColor.fromHexString(noSpace);
+        if (fromHex != CustomColor.NONE) return fromHex;
 
-            if (parseTry == CustomColor.NONE) {
-                throw new RuntimeException("Failed to parse CustomColor");
-            }
-        }
-
-        this.r = parseTry.r;
-        this.g = parseTry.g;
-        this.b = parseTry.b;
-        this.a = parseTry.a;
+        throw new RuntimeException("Failed to parse CustomColor");
     }
 
     public static CustomColor fromChatFormatting(ChatFormatting cf) {
@@ -188,6 +179,28 @@ public class CustomColor {
         return new CustomColor(this, (int) (a * 255));
     }
 
+    public float[] asHSB() {
+        return Color.RGBtoHSB(this.r, this.g, this.b, null);
+    }
+
+    public CustomColor hueShift(float degree) {
+        float[] hsb = this.asHSB();
+        float hue = hsb[0] + degree;
+        return fromHSV(hue, hsb[1], hsb[2], this.a);
+    }
+
+    public CustomColor saturationShift(float degree) {
+        float[] hsb = this.asHSB();
+        float saturation = hsb[1] + degree;
+        return fromHSV(hsb[0], saturation, hsb[2], this.a);
+    }
+
+    public CustomColor brightnessShift(float degree) {
+        float[] hsb = this.asHSB();
+        float brightness = hsb[2] + degree;
+        return fromHSV(hsb[0], hsb[1], brightness, this.a);
+    }
+
     /** 0xAARRGGBB format */
     public int asInt() {
         int a = Math.min(this.a, 255);
@@ -207,14 +220,6 @@ public class CustomColor {
      */
     public String toHexString() {
         return "#" + String.format("%08x", ((r << 24) | (g << 16) | (b << 8) | a));
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof CustomColor color)) return false;
-
-        // colors are equal as long as rgba values match
-        return (this.r == color.r && this.g == color.g && this.b == color.b && this.a == color.a);
     }
 
     @Override

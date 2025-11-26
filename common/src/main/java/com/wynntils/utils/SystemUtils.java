@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2021-2023.
+ * Copyright © Wynntils 2021-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils;
@@ -20,6 +20,12 @@ public final class SystemUtils {
         return System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac");
     }
 
+    public static boolean isWayland() {
+        String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
+        String sessionType = System.getenv("XDG_SESSION_TYPE");
+        return (waylandDisplay != null && !waylandDisplay.isEmpty()) || ("wayland".equalsIgnoreCase(sessionType));
+    }
+
     public static void copyImageToClipboard(BufferedImage bi) {
         ClipboardImage ci = new ClipboardImage(bi);
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(ci, null);
@@ -32,7 +38,7 @@ public final class SystemUtils {
             image.downloadTexture(0, false);
             image.flipY();
 
-            int[] pixelValues = image.makePixelArray();
+            int[] pixelValues = image.getPixels();
 
             bufferedimage.setRGB(0, 0, fb.width, fb.height, pixelValues, 0, fb.width);
         }

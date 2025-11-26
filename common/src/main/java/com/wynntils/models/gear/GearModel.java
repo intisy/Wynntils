@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.gear;
@@ -7,6 +7,8 @@ package com.wynntils.models.gear;
 import com.google.gson.JsonObject;
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Model;
+import com.wynntils.core.components.Models;
+import com.wynntils.core.net.DownloadRegistry;
 import com.wynntils.models.gear.type.GearInfo;
 import com.wynntils.models.gear.type.GearInstance;
 import com.wynntils.models.gear.type.GearTier;
@@ -19,12 +21,15 @@ import com.wynntils.models.stats.type.StatType;
 import com.wynntils.models.wynnitem.parsing.CraftedItemParseResults;
 import com.wynntils.models.wynnitem.parsing.WynnItemParseResult;
 import com.wynntils.models.wynnitem.parsing.WynnItemParser;
+import com.wynntils.models.wynnitem.type.ItemObtainInfo;
 import com.wynntils.models.wynnitem.type.ItemObtainType;
 import com.wynntils.utils.type.CappedValue;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import net.minecraft.world.item.ItemStack;
 
@@ -44,12 +49,21 @@ import net.minecraft.world.item.ItemStack;
  * base = base + (base * percentage1) + (base * percentage2) + rawValue
  */
 public final class GearModel extends Model {
+    // Test in GearModel_GEAR_PATTERN
+    public static final Pattern GEAR_PATTERN = Pattern.compile(
+            "^(?:(?<unidrarity>§[5abcdef])(?<unidentified>Unidentified ))?(?:§f⬡ )?(?<idrarity>§[5abcdef])?(?:Shiny )?(?<name>.+)$");
+
     private final GearInfoRegistry gearInfoRegistry = new GearInfoRegistry();
 
     private final Map<GearBoxItem, List<GearInfo>> possibilitiesCache = new HashMap<>();
 
     public GearModel() {
         super(List.of());
+    }
+
+    @Override
+    public void registerDownloads(DownloadRegistry registry) {
+        gearInfoRegistry.registerDownloads(registry);
     }
 
     public List<GearInfo> getPossibleGears(GearBoxItem gearBoxItem) {
@@ -69,17 +83,12 @@ public final class GearModel extends Model {
         return possibleGear;
     }
 
-    public boolean canBeGearBox(GearInfo gear) {
+    private boolean canBeGearBox(GearInfo gear) {
         // If an item is pre-identified, it cannot be in a gear box
         // Also check that the item has a source that can drop boxed items
         return !gear.metaInfo().preIdentified()
                 && gear.metaInfo().obtainInfo().stream()
                         .anyMatch(x -> ItemObtainType.BOXED_ITEMS.contains(x.sourceType()));
-    }
-
-    @Override
-    public void reloadData() {
-        gearInfoRegistry.loadData();
     }
 
     // For "real" gear items eg. from the inventory
@@ -108,7 +117,7 @@ public final class GearModel extends Model {
                 result.identifications(),
                 result.powders(),
                 result.rerolls(),
-                result.shinyStat(),
+                Optional.empty(),
                 false,
                 Optional.empty());
     }
@@ -131,15 +140,14 @@ public final class GearModel extends Model {
         // If it is crafted, and has a skin, then we cannot determine weapon type from item stack
         // Maybe it is possible to find in the string type, e.g. "Crafted Wand"
         gearType = GearType.fromString(result.itemType());
-        if (gearType == null && craftedResults.requirements().classType().isPresent()) {
+        if (gearType == null && result.requirements().classType().isPresent()) {
             // If the item is signed, we can find the class type from the requirements
-            gearType = GearType.fromClassType(
-                    craftedResults.requirements().classType().get());
+            gearType = GearType.fromClassType(result.requirements().classType().get());
         }
 
         // If we still failed to find the gear type, try to find it from the item stack
         if (gearType == null) {
-            gearType = GearType.fromItemStack(itemStack);
+            gearType = GearType.fromItemStack(itemStack, true);
 
             if (gearType == null) {
                 // If we failed to find the gear type, assume it is a weapon
@@ -151,11 +159,11 @@ public final class GearModel extends Model {
                 craftedResults.name(),
                 craftedResults.effectStrength(),
                 gearType,
-                craftedResults.attackSpeed(),
+                result.attackSpeed(),
                 result.health(),
-                craftedResults.damages(),
-                craftedResults.defences(),
-                craftedResults.requirements(),
+                result.damages(),
+                result.defences(),
+                result.requirements(),
                 possibleValuesMap.values().stream().toList(),
                 result.identifications(),
                 result.powders(),
@@ -165,20 +173,35 @@ public final class GearModel extends Model {
     }
 
     public UnknownGearItem parseUnknownGearItem(
-            String name, GearType gearType, GearTier gearTier, ItemStack itemStack) {
+            String name, GearType gearType, GearTier gearTier, boolean isUnidentified, ItemStack itemStack) {
         WynnItemParseResult result = WynnItemParser.parseItemStack(itemStack, null);
 
-        // FIXME: Damages and requirements are not yet parsed
+        if (gearType == GearType.WEAPON) {
+            // If the gear type is weapon, we can try to find the weapon type from the requirements
+            gearType = result.requirements()
+                    .classType()
+                    .map(GearType::fromClassType)
+                    .orElse(gearType);
+        }
+
         return new UnknownGearItem(
                 name,
                 gearType,
                 gearTier,
+                isUnidentified,
                 result.level(),
-                List.of(),
-                List.of(),
+                result.attackSpeed(),
+                result.health(),
+                result.damages(),
+                result.defences(),
+                result.requirements(),
+                result.allRequirementsMet(),
                 result.identifications(),
                 result.powders(),
-                result.rerolls());
+                result.powderSlots(),
+                result.rerolls(),
+                result.setInstance().orElse(null),
+                result.shinyStat().orElse(null));
     }
 
     public GearInfo getGearInfoFromDisplayName(String gearName) {
@@ -187,6 +210,18 @@ public final class GearModel extends Model {
 
     public GearInfo getGearInfoFromApiName(String apiName) {
         return gearInfoRegistry.getFromApiName(apiName);
+    }
+
+    public List<ItemObtainInfo> getObtainInfo(GearInfo gearInfo) {
+        List<ItemObtainInfo> obtainInfo = new ArrayList<>(gearInfo.metaInfo().obtainInfo());
+
+        // If the API gave no info, then use the crowd sourced info
+        if (obtainInfo.size() == 1 && obtainInfo.getFirst().equals(ItemObtainInfo.UNKNOWN)) {
+            obtainInfo.clear();
+        }
+
+        obtainInfo.addAll(Models.WynnItem.getObtainInfo(gearInfo.name()));
+        return obtainInfo;
     }
 
     public Stream<GearInfo> getAllGearInfos() {

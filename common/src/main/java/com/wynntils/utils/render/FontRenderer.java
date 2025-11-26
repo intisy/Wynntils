@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils.render;
@@ -15,6 +15,7 @@ import com.wynntils.utils.render.buffered.BufferedFontRenderer;
 import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.TextShadow;
 import com.wynntils.utils.render.type.VerticalAlignment;
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -55,7 +56,8 @@ public final class FontRenderer {
             HorizontalAlignment horizontalAlignment,
             VerticalAlignment verticalAlignment,
             TextShadow shadow,
-            float textScale) {
+            float textScale,
+            Font.DisplayMode displayMode) {
         BufferedFontRenderer.getInstance()
                 .renderText(
                         poseStack,
@@ -67,9 +69,33 @@ public final class FontRenderer {
                         horizontalAlignment,
                         verticalAlignment,
                         shadow,
-                        textScale);
+                        textScale,
+                        displayMode);
 
         BUFFER_SOURCE.endBatch();
+    }
+
+    public void renderText(
+            PoseStack poseStack,
+            StyledText text,
+            float x,
+            float y,
+            CustomColor customColor,
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
+            TextShadow shadow,
+            float textScale) {
+        renderText(
+                poseStack,
+                text,
+                x,
+                y,
+                customColor,
+                horizontalAlignment,
+                verticalAlignment,
+                shadow,
+                textScale,
+                Font.DisplayMode.SEE_THROUGH);
     }
 
     public void renderText(
@@ -86,6 +112,70 @@ public final class FontRenderer {
 
     public void renderAlignedTextInBox(
             PoseStack poseStack,
+            StyledText[] lines,
+            float x1,
+            float x2,
+            float y1,
+            float y2,
+            float maxWidth,
+            CustomColor customColor,
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
+            TextShadow textShadow,
+            float textScale) {
+        int lineHeight = font.lineHeight;
+        List<StyledText> adjustedLines = new ArrayList<>();
+        for (StyledText line : lines) {
+            if (maxWidth == 0 || font.width(line.getComponent()) < maxWidth / textScale) {
+                adjustedLines.add(line);
+            } else {
+                List<FormattedText> parts =
+                        font.getSplitter().splitLines(line.getComponent(), (int) (maxWidth / textScale), Style.EMPTY);
+                StyledText lastPart = StyledText.EMPTY;
+                for (FormattedText part : parts) {
+                    Style lastStyle = ComponentUtils.getLastPartCodes(lastPart);
+                    StyledText text = StyledText.fromComponent(
+                                    Component.literal("").withStyle(lastStyle))
+                            .append(StyledText.fromComponent(ComponentUtils.formattedTextToComponent(part)));
+                    lastPart = text;
+                    adjustedLines.add(text);
+                }
+            }
+        }
+
+        float calculatedTextHeight = (adjustedLines.size() - 1) * lineHeight * textScale;
+        float renderX =
+                switch (horizontalAlignment) {
+                    case LEFT -> x1;
+                    case CENTER -> (x1 + x2) / 2f;
+                    case RIGHT -> x2;
+                };
+
+        float renderY =
+                switch (verticalAlignment) {
+                    case TOP -> y1;
+                    case MIDDLE -> (y1 + y2) / 2f - calculatedTextHeight / 2f;
+                    case BOTTOM -> y2 - calculatedTextHeight;
+                };
+
+        float lineOffset = 0;
+        for (StyledText text : adjustedLines) {
+            renderText(
+                    poseStack,
+                    text,
+                    renderX,
+                    renderY + lineOffset,
+                    customColor,
+                    horizontalAlignment,
+                    verticalAlignment,
+                    textShadow,
+                    textScale);
+            lineOffset += lineHeight * textScale;
+        }
+    }
+
+    public void renderAlignedTextInBox(
+            PoseStack poseStack,
             StyledText text,
             float x1,
             float x2,
@@ -97,25 +187,13 @@ public final class FontRenderer {
             VerticalAlignment verticalAlignment,
             TextShadow textShadow,
             float textScale) {
-        float renderX =
-                switch (horizontalAlignment) {
-                    case LEFT -> x1;
-                    case CENTER -> (x1 + x2) / 2f;
-                    case RIGHT -> x2;
-                };
-
-        float renderY =
-                switch (verticalAlignment) {
-                    case TOP -> y1;
-                    case MIDDLE -> (y1 + y2) / 2f;
-                    case BOTTOM -> y2;
-                };
-
-        renderText(
+        renderAlignedTextInBox(
                 poseStack,
-                text,
-                renderX,
-                renderY,
+                new StyledText[] {text},
+                x1,
+                x2,
+                y1,
+                y2,
                 maxWidth,
                 customColor,
                 horizontalAlignment,
@@ -138,7 +216,7 @@ public final class FontRenderer {
             TextShadow textShadow) {
         renderAlignedTextInBox(
                 poseStack,
-                text,
+                new StyledText[] {text},
                 x1,
                 x2,
                 y1,
@@ -190,12 +268,12 @@ public final class FontRenderer {
                 renderX,
                 cursorRenderY,
                 0,
-                font.width(text.getString()),
+                font.width(text.getComponent()),
                 font.lineHeight + 2);
 
         renderAlignedTextInBox(
                 poseStack,
-                text,
+                new StyledText[] {text},
                 x1,
                 x2,
                 y1,
@@ -220,7 +298,7 @@ public final class FontRenderer {
             TextShadow textShadow) {
         renderAlignedTextInBox(
                 poseStack,
-                text,
+                new StyledText[] {text},
                 x1,
                 x2,
                 y,
@@ -245,7 +323,7 @@ public final class FontRenderer {
             TextShadow textShadow) {
         renderAlignedTextInBox(
                 poseStack,
-                text,
+                new StyledText[] {text},
                 x,
                 x,
                 y1,
@@ -268,11 +346,22 @@ public final class FontRenderer {
             HorizontalAlignment horizontalAlignment,
             VerticalAlignment verticalAlignment,
             TextShadow shadow,
-            float textScale) {
+            float textScale,
+            Font.DisplayMode displayMode) {
         if (text == null) return;
 
-        if (maxWidth == 0 || font.width(text.getString()) / textScale < maxWidth) {
-            renderText(poseStack, text, x, y, customColor, horizontalAlignment, verticalAlignment, shadow, textScale);
+        if (maxWidth == 0 || font.width(text.getComponent()) / textScale < maxWidth) {
+            renderText(
+                    poseStack,
+                    text,
+                    x,
+                    y,
+                    customColor,
+                    horizontalAlignment,
+                    verticalAlignment,
+                    shadow,
+                    textScale,
+                    displayMode);
             return;
         }
 
@@ -297,7 +386,8 @@ public final class FontRenderer {
                     horizontalAlignment,
                     verticalAlignment,
                     shadow,
-                    textScale);
+                    textScale,
+                    displayMode);
         }
     }
 
@@ -310,8 +400,68 @@ public final class FontRenderer {
             CustomColor customColor,
             HorizontalAlignment horizontalAlignment,
             VerticalAlignment verticalAlignment,
+            TextShadow shadow,
+            float textScale) {
+        renderText(
+                poseStack,
+                text,
+                x,
+                y,
+                maxWidth,
+                customColor,
+                horizontalAlignment,
+                verticalAlignment,
+                shadow,
+                textScale,
+                Font.DisplayMode.SEE_THROUGH);
+    }
+
+    public void renderText(
+            PoseStack poseStack,
+            StyledText text,
+            float x,
+            float y,
+            float maxWidth,
+            CustomColor customColor,
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
+            TextShadow shadow,
+            Font.DisplayMode displayMode) {
+        renderText(
+                poseStack,
+                text,
+                x,
+                y,
+                maxWidth,
+                customColor,
+                horizontalAlignment,
+                verticalAlignment,
+                shadow,
+                1f,
+                displayMode);
+    }
+
+    public void renderText(
+            PoseStack poseStack,
+            StyledText text,
+            float x,
+            float y,
+            float maxWidth,
+            CustomColor customColor,
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
             TextShadow shadow) {
-        renderText(poseStack, text, x, y, maxWidth, customColor, horizontalAlignment, verticalAlignment, shadow, 1f);
+        renderText(
+                poseStack,
+                text,
+                x,
+                y,
+                maxWidth,
+                customColor,
+                horizontalAlignment,
+                verticalAlignment,
+                shadow,
+                Font.DisplayMode.SEE_THROUGH);
     }
 
     public void renderScrollingText(
@@ -325,7 +475,7 @@ public final class FontRenderer {
             VerticalAlignment verticalAlignment,
             TextShadow shadow,
             float textScale) {
-        int textLength = (int) ((font.width(styledText.getString()) + 1) * textScale);
+        int textLength = (int) ((font.width(styledText.getComponent()) + 1) * textScale);
 
         if (textLength > renderWidth) {
             float maxScrollOffset =
@@ -421,12 +571,11 @@ public final class FontRenderer {
             float y1,
             float y2,
             float renderWidth,
-            float translationX,
-            float translationY,
             CustomColor customColor,
             HorizontalAlignment horizontalAlignment,
             VerticalAlignment verticalAlignment,
-            TextShadow textShadow) {
+            TextShadow textShadow,
+            float textScale) {
         float renderX =
                 switch (horizontalAlignment) {
                     case LEFT -> x1;
@@ -451,10 +600,37 @@ public final class FontRenderer {
                 horizontalAlignment,
                 verticalAlignment,
                 textShadow,
+                textScale);
+    }
+
+    public void renderScrollingAlignedTextInBox(
+            PoseStack poseStack,
+            StyledText text,
+            float x1,
+            float x2,
+            float y1,
+            float y2,
+            float renderWidth,
+            CustomColor customColor,
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
+            TextShadow textShadow) {
+        renderScrollingAlignedTextInBox(
+                poseStack,
+                text,
+                x1,
+                x2,
+                y1,
+                y2,
+                renderWidth,
+                customColor,
+                horizontalAlignment,
+                verticalAlignment,
+                textShadow,
                 1f);
     }
 
-    public void renderText(PoseStack poseStack, float x, float y, TextRenderTask line) {
+    public void renderText(PoseStack poseStack, float x, float y, TextRenderTask line, Font.DisplayMode displayMode) {
         renderText(
                 poseStack,
                 line.getText(),
@@ -464,7 +640,12 @@ public final class FontRenderer {
                 line.getSetting().customColor(),
                 line.getSetting().horizontalAlignment(),
                 line.getSetting().verticalAlignment(),
-                line.getSetting().shadow());
+                line.getSetting().shadow(),
+                displayMode);
+    }
+
+    public void renderText(PoseStack poseStack, float x, float y, TextRenderTask line) {
+        renderText(poseStack, x, y, line, Font.DisplayMode.SEE_THROUGH);
     }
 
     public void renderTexts(PoseStack poseStack, float x, float y, List<TextRenderTask> lines) {
@@ -544,12 +725,14 @@ public final class FontRenderer {
                 .sum();
     }
 
-    public float calculateRenderHeight(StyledText line, float maxWidth) {
-        return calculateRenderHeight(line.getString(), maxWidth);
+    public float calculateRenderHeight(String line, float maxWidth) {
+        return calculateRenderHeight(StyledText.fromString(line), maxWidth);
     }
 
-    public float calculateRenderHeight(String line, float maxWidth) {
+    public float calculateRenderHeight(StyledText line, float maxWidth) {
         // If we ask Mojang code the line height of an empty line we get 0 back so replace with space
-        return font.wordWrapHeight(line.isEmpty() ? " " : line, maxWidth == 0 ? Integer.MAX_VALUE : (int) maxWidth);
+        return font.wordWrapHeight(
+                line.isEmpty() ? Component.literal(" ") : line.getComponent(),
+                maxWidth == 0 ? Integer.MAX_VALUE : (int) maxWidth);
     }
 }

@@ -1,9 +1,10 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.inventory;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.components.Services;
@@ -22,14 +23,14 @@ import com.wynntils.mc.event.ScreenInitEvent;
 import com.wynntils.mc.event.SlotRenderEvent;
 import com.wynntils.mc.extension.ScreenExtension;
 import com.wynntils.models.containers.containers.ContentBookContainer;
+import com.wynntils.models.containers.containers.CosmeticContainer;
+import com.wynntils.models.containers.containers.GuildBadgesContainer;
 import com.wynntils.models.containers.containers.GuildBankContainer;
 import com.wynntils.models.containers.containers.GuildMemberListContainer;
 import com.wynntils.models.containers.containers.GuildTerritoriesContainer;
 import com.wynntils.models.containers.containers.HousingJukeboxContainer;
 import com.wynntils.models.containers.containers.HousingListContainer;
 import com.wynntils.models.containers.containers.JukeboxContainer;
-import com.wynntils.models.containers.containers.PetMenuContainer;
-import com.wynntils.models.containers.containers.ScrapMenuContainer;
 import com.wynntils.models.containers.containers.personal.AccountBankContainer;
 import com.wynntils.models.containers.containers.personal.BookshelfContainer;
 import com.wynntils.models.containers.containers.personal.CharacterBankContainer;
@@ -40,6 +41,7 @@ import com.wynntils.models.containers.containers.personal.PersonalStorageContain
 import com.wynntils.models.containers.type.SearchableContainerProperty;
 import com.wynntils.models.items.WynnItem;
 import com.wynntils.models.items.WynnItemData;
+import com.wynntils.screens.base.TextboxScreen;
 import com.wynntils.screens.base.widgets.ItemFilterUIButton;
 import com.wynntils.screens.base.widgets.ItemSearchWidget;
 import com.wynntils.screens.base.widgets.SearchWidget;
@@ -60,7 +62,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.Container;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
@@ -68,46 +69,46 @@ import org.lwjgl.glfw.GLFW;
 @ConfigCategory(Category.INVENTORY)
 public class ContainerSearchFeature extends Feature {
     @Persisted
-    public final Config<Boolean> filterInBank = new Config<>(true);
+    private final Config<Boolean> filterInBank = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInBlockBank = new Config<>(true);
+    private final Config<Boolean> filterInBlockBank = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInBookshelf = new Config<>(true);
+    private final Config<Boolean> filterInBookshelf = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInMiscBucket = new Config<>(true);
+    private final Config<Boolean> filterInMiscBucket = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInGuildBank = new Config<>(true);
+    private final Config<Boolean> filterInGuildBank = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInGuildMemberList = new Config<>(true);
+    private final Config<Boolean> filterInGuildMemberList = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInScrapMenu = new Config<>(true);
+    private final Config<Boolean> filterInCosmeticMenus = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInPetMenu = new Config<>(true);
+    private final Config<Boolean> filterInContentBook = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInContentBook = new Config<>(true);
+    private final Config<Boolean> filterInGuildTerritories = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInGuildTerritories = new Config<>(true);
+    private final Config<Boolean> filterInGuildBadges = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInHousingJukebox = new Config<>(true);
+    private final Config<Boolean> filterInHousingJukebox = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInHousingList = new Config<>(true);
+    private final Config<Boolean> filterInHousingList = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> filterInJukebox = new Config<>(true);
+    private final Config<Boolean> filterInJukebox = new Config<>(true);
 
     @Persisted
-    public final Config<CustomColor> highlightColor = new Config<>(CommonColors.MAGENTA);
+    private final Config<CustomColor> highlightColor = new Config<>(CommonColors.MAGENTA);
 
     private final Map<Class<? extends SearchableContainerProperty>, Supplier<Boolean>> searchableContainerMap =
             Map.ofEntries(
@@ -116,6 +117,7 @@ public class ContainerSearchFeature extends Feature {
                     Map.entry(CharacterBankContainer.class, filterInBank::get),
                     Map.entry(ContentBookContainer.class, filterInContentBook::get),
                     Map.entry(GuildBankContainer.class, filterInGuildBank::get),
+                    Map.entry(GuildBadgesContainer.class, filterInGuildBadges::get),
                     Map.entry(GuildMemberListContainer.class, filterInGuildMemberList::get),
                     Map.entry(GuildTerritoriesContainer.class, filterInGuildTerritories::get),
                     Map.entry(HousingJukeboxContainer.class, filterInHousingJukebox::get),
@@ -124,8 +126,7 @@ public class ContainerSearchFeature extends Feature {
                     Map.entry(JukeboxContainer.class, filterInJukebox::get),
                     Map.entry(MiscBucketContainer.class, filterInMiscBucket::get),
                     Map.entry(PersonalBlockBankContainer.class, filterInBlockBank::get),
-                    Map.entry(PetMenuContainer.class, filterInPetMenu::get),
-                    Map.entry(ScrapMenuContainer.class, filterInScrapMenu::get));
+                    Map.entry(CosmeticContainer.class, filterInCosmeticMenus::get));
 
     // If the guild bank has lots of custom (crafted) items, it can take multiple packets and a decent amount of time
     // for Wynn to send us the entire updated inventory. During this, the inventory will be in a weird state where
@@ -142,7 +143,7 @@ public class ContainerSearchFeature extends Feature {
     private ItemSearchQuery lastSearchQuery;
 
     @SubscribeEvent
-    public void onScreenInit(ScreenInitEvent event) {
+    public void onScreenInit(ScreenInitEvent.Pre event) {
         if (!(event.getScreen() instanceof AbstractContainerScreen<?> screen)) return;
         if (!(screen.getMenu() instanceof ChestMenu)) return;
 
@@ -155,17 +156,17 @@ public class ContainerSearchFeature extends Feature {
 
         matchedItems = false;
 
-        if (currentContainer instanceof PersonalStorageContainer) {
-            // Personal storage container textures extend above the normal renderY
+        if (currentContainer instanceof SearchableContainerProperty searchableContainer) {
+            // Some container textures extend above the normal renderY
             // so the widgets need to be shifted up more
-            renderY -= 20;
+            renderY -= searchableContainer.renderYOffset();
         }
 
         addWidgets(((AbstractContainerScreen<ChestMenu>) screen), renderX, renderY);
     }
 
     @SubscribeEvent(priority = EventPriority.LOW)
-    public void onRenderSlot(SlotRenderEvent.Pre e) {
+    public void onRenderSlot(SlotRenderEvent.CountPre e) {
         ItemStack itemStack = e.getSlot().getItem();
         Optional<WynnItem> wynnItemOpt = Models.Item.getWynnItem(itemStack);
         if (wynnItemOpt.isEmpty()) return;
@@ -173,7 +174,9 @@ public class ContainerSearchFeature extends Feature {
         Boolean result = wynnItemOpt.get().getData().get(WynnItemData.SEARCHED_KEY);
         if (result == null || !result) return;
 
-        RenderUtils.drawArc(e.getPoseStack(), highlightColor.get(), e.getSlot().x, e.getSlot().y, 200, 1f, 6, 8);
+        RenderSystem.enableDepthTest();
+        RenderUtils.drawArc(e.getPoseStack(), highlightColor.get(), e.getSlot().x, e.getSlot().y, 100, 1f, 6, 8);
+        RenderSystem.disableDepthTest();
     }
 
     @SubscribeEvent
@@ -183,7 +186,7 @@ public class ContainerSearchFeature extends Feature {
 
         if (!matchedItems
                 && autoSearching
-                && McUtils.mc().screen instanceof AbstractContainerScreen<?> abstractContainerScreen) {
+                && McUtils.screen() instanceof AbstractContainerScreen<?> abstractContainerScreen) {
             tryAutoSearch(abstractContainerScreen);
         }
     }
@@ -213,12 +216,17 @@ public class ContainerSearchFeature extends Feature {
     @SubscribeEvent
     public void onInventoryKeyPress(InventoryKeyPressEvent event) {
         // Don't want to be able to search whilst the edit widget is open
-        if (event.getKeyCode() == GLFW.GLFW_KEY_ENTER && !Models.Bank.isEditingName()) {
+        if (event.getKeyCode() == GLFW.GLFW_KEY_ENTER && !Models.Bank.isEditingMode()) {
             if (lastSearchWidget == null
                     || lastSearchWidget.getTextBoxInput().isEmpty()
                     || currentContainer == null
-                    || !(McUtils.mc().screen instanceof AbstractContainerScreen<?> abstractContainerScreen)
+                    || !(McUtils.screen() instanceof AbstractContainerScreen<?> abstractContainerScreen)
                     || !(abstractContainerScreen.getMenu() instanceof ChestMenu chestMenu)) return;
+
+            // Set widget as unfocused so number input actions can be performed after searching
+            abstractContainerScreen.clearFocus();
+            TextboxScreen textboxScreen = (TextboxScreen) abstractContainerScreen;
+            textboxScreen.setFocusedTextInput(null);
 
             // Default to forwards
             direction = 1;
@@ -390,7 +398,7 @@ public class ContainerSearchFeature extends Feature {
             String name = StyledText.fromComponent(itemStack.getHoverName())
                     .getStringWithoutFormatting()
                     .toLowerCase(Locale.ROOT);
-            boolean filtered = !search.isEmpty() && name.contains(search) && itemStack.getItem() != Items.AIR;
+            boolean filtered = !search.isEmpty() && name.contains(search) && !itemStack.isEmpty();
 
             wynnItemOpt.get().getData().store(WynnItemData.SEARCHED_KEY, filtered);
             if (filtered) {
@@ -400,7 +408,7 @@ public class ContainerSearchFeature extends Feature {
     }
 
     private void forceUpdateSearch() {
-        Screen screen = McUtils.mc().screen;
+        Screen screen = McUtils.screen();
         if (lastSearchWidget != null
                 && screen instanceof AbstractContainerScreen<?> abstractContainerScreen
                 && abstractContainerScreen.getMenu() instanceof ChestMenu chestMenu) {

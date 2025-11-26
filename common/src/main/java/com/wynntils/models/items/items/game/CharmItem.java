@@ -1,13 +1,16 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.items.items.game;
 
 import com.wynntils.models.character.type.ClassType;
 import com.wynntils.models.gear.type.GearTier;
+import com.wynntils.models.gear.type.GearType;
 import com.wynntils.models.items.properties.GearTierItemProperty;
+import com.wynntils.models.items.properties.GearTypeItemProperty;
 import com.wynntils.models.items.properties.IdentifiableItemProperty;
+import com.wynntils.models.items.properties.LeveledItemProperty;
 import com.wynntils.models.items.properties.RerollableItemProperty;
 import com.wynntils.models.rewards.type.CharmInfo;
 import com.wynntils.models.rewards.type.CharmInstance;
@@ -20,13 +23,22 @@ import java.util.List;
 import java.util.Optional;
 
 public class CharmItem extends GameItem
-        implements GearTierItemProperty, RerollableItemProperty, IdentifiableItemProperty<CharmInfo, CharmInstance> {
+        implements GearTierItemProperty,
+                GearTypeItemProperty,
+                RerollableItemProperty,
+                LeveledItemProperty,
+                IdentifiableItemProperty<CharmInfo, CharmInstance> {
     private final CharmInfo charmInfo;
     private final CharmInstance charmInstance;
 
     public CharmItem(CharmInfo charmInfo, CharmInstance charmInstance) {
         this.charmInfo = charmInfo;
         this.charmInstance = charmInstance;
+    }
+
+    @Override
+    public GearType getGearType() {
+        return GearType.CHARM;
     }
 
     @Override
@@ -63,6 +75,11 @@ public class CharmItem extends GameItem
     @Override
     public List<StatType> getVariableStats() {
         return charmInfo.variableStats().stream().map(Pair::a).toList();
+    }
+
+    @Override
+    public int getLevel() {
+        return charmInfo.requirements().level();
     }
 
     @Override

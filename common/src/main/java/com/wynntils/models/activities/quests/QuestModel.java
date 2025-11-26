@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.activities.quests;
@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.core.Position;
 import org.apache.commons.lang3.StringUtils;
 
 public final class QuestModel extends Model {
@@ -66,7 +66,7 @@ public final class QuestModel extends Model {
         return sortQuestInfoList(sortOrder, getQuestsRaw());
     }
 
-    public List<QuestInfo> getMiniQuestsRaw() {
+    private List<QuestInfo> getMiniQuestsRaw() {
         return Collections.unmodifiableList(questStorage
                 .getOrDefault(Models.Character.getId(), QuestStorage.EMPTY)
                 .miniQuests());
@@ -94,24 +94,27 @@ public final class QuestModel extends Model {
         Comparator<QuestInfo> baseComparator =
                 Comparator.comparing(questInfo -> !questInfo.name().equals(trackedQuestName));
         return switch (sortOrder) {
-            case LEVEL -> questList.stream()
-                    .sorted(baseComparator
-                            .thenComparing(QuestInfo::status)
-                            .thenComparing(QuestInfo::sortLevel)
-                            .thenComparing(QuestInfo::name))
-                    .toList();
-            case DISTANCE -> questList.stream()
-                    .sorted(baseComparator
-                            .thenComparing(QuestInfo::status)
-                            .thenComparing(new LocationComparator())
-                            .thenComparing(QuestInfo::name))
-                    .toList();
-            case ALPHABETIC -> questList.stream()
-                    .sorted(baseComparator
-                            .thenComparing(QuestInfo::status)
-                            .thenComparing(QuestInfo::name)
-                            .thenComparing(QuestInfo::sortLevel))
-                    .toList();
+            case LEVEL ->
+                questList.stream()
+                        .sorted(baseComparator
+                                .thenComparing(QuestInfo::status)
+                                .thenComparing(QuestInfo::sortLevel)
+                                .thenComparing(QuestInfo::name))
+                        .toList();
+            case DISTANCE ->
+                questList.stream()
+                        .sorted(baseComparator
+                                .thenComparing(QuestInfo::status)
+                                .thenComparing(new LocationComparator())
+                                .thenComparing(QuestInfo::name))
+                        .toList();
+            case ALPHABETIC ->
+                questList.stream()
+                        .sorted(baseComparator
+                                .thenComparing(QuestInfo::status)
+                                .thenComparing(QuestInfo::name)
+                                .thenComparing(QuestInfo::sortLevel))
+                        .toList();
         };
     }
 
@@ -192,7 +195,7 @@ public final class QuestModel extends Model {
         WynntilsMod.info("Updated mini-quests from query, got " + newMiniQuests.size() + " mini-quests.");
     }
 
-    private static QuestInfo getQuestInfoFromActivity(ActivityInfo activity) {
+    public static QuestInfo getQuestInfoFromActivity(ActivityInfo activity) {
         // We should always have a length, but if not, better fake one than crashing
 
         return new QuestInfo(
@@ -213,14 +216,14 @@ public final class QuestModel extends Model {
     }
 
     private static class LocationComparator implements Comparator<QuestInfo> {
-        private final Vec3 playerLocation = McUtils.player().position();
+        private final Position playerLocation = McUtils.player().position();
 
         private double getDistance(Optional<Location> loc) {
             // Quests with no location always counts as closest
             if (loc.isEmpty()) return 0f;
 
             Location location = loc.get();
-            return playerLocation.distanceToSqr(location.toVec3());
+            return location.distanceToSqr(playerLocation);
         }
 
         @Override

@@ -1,9 +1,14 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.beacons.type;
 
-import net.minecraft.world.phys.Vec3;
+import com.wynntils.utils.mc.type.PreciseLocation;
 
-public record Beacon(Vec3 position, LootrunBeaconKind color) {}
+public record Beacon<T extends BeaconKind>(PreciseLocation position, T beaconKind) {
+    @Override
+    public String toString() {
+        return "Beacon[" + "position=" + position + ", " + "beaconKind=" + beaconKind + ']';
+    }
+}

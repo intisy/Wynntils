@@ -1,9 +1,10 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.overlays.BarOverlay;
 import com.wynntils.core.consumers.overlays.ContainerOverlay;
@@ -15,9 +16,12 @@ import com.wynntils.models.token.event.TokenGatekeeperEvent;
 import com.wynntils.utils.colors.ColorChatFormatting;
 import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.render.Texture;
+import com.wynntils.utils.render.buffered.BufferedRenderUtils;
 import com.wynntils.utils.render.type.HorizontalAlignment;
+import com.wynntils.utils.render.type.UniversalTexture;
 import com.wynntils.utils.render.type.VerticalAlignment;
 import java.util.List;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public class TokenBarsOverlay extends ContainerOverlay<TokenBarsOverlay.TokenBarOverlay> {
@@ -55,7 +59,10 @@ public class TokenBarsOverlay extends ContainerOverlay<TokenBarsOverlay.TokenBar
 
     protected static final class TokenBarOverlay extends BarOverlay {
         @Persisted
-        public final Config<ColorChatFormatting> color = new Config<>(ColorChatFormatting.GOLD);
+        protected final Config<ColorChatFormatting> color = new Config<>(ColorChatFormatting.GOLD);
+
+        @Persisted
+        protected final Config<UniversalTexture> barTexture = new Config<>(UniversalTexture.A);
 
         private TokenBarOverlay(int id) {
             super(id, new OverlaySize(81, 21));
@@ -76,8 +83,26 @@ public class TokenBarsOverlay extends ContainerOverlay<TokenBarsOverlay.TokenBar
         }
 
         @Override
-        public boolean isRendered() {
-            return true;
+        protected void renderBar(
+                PoseStack poseStack,
+                MultiBufferSource bufferSource,
+                float renderY,
+                float renderHeight,
+                float progress) {
+            BufferedRenderUtils.drawColoredProgressBar(
+                    poseStack,
+                    bufferSource,
+                    Texture.UNIVERSAL_BAR,
+                    getRenderColor(),
+                    getRenderX(),
+                    renderY,
+                    getRenderX() + getWidth(),
+                    renderY + renderHeight,
+                    0,
+                    barTexture.get().getTextureY1(),
+                    Texture.UNIVERSAL_BAR.width(),
+                    barTexture.get().getTextureY2(),
+                    progress);
         }
 
         @Override
@@ -92,7 +117,7 @@ public class TokenBarsOverlay extends ContainerOverlay<TokenBarsOverlay.TokenBar
 
         @Override
         protected float getTextureHeight() {
-            return Texture.UNIVERSAL_BAR.height() / 2f;
+            return barTexture.get().getHeight();
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.activities.type;
@@ -10,14 +10,14 @@ import net.minecraft.network.chat.Component;
 
 public enum ActivityStatus {
     STARTED(
-            Pattern.compile(ChatFormatting.GREEN + "Currently in progress"),
+            Pattern.compile(ChatFormatting.GREEN + "Currently (in progress|tracking)"),
             Pattern.compile(ChatFormatting.GREEN + "Event has started")),
     AVAILABLE(
             Pattern.compile(ChatFormatting.YELLOW + "Can be .+"),
             Pattern.compile(ChatFormatting.GREEN + "Event starting in .+")),
     UNAVAILABLE(
             Pattern.compile(ChatFormatting.RED + "Cannot be .+"),
-            Pattern.compile(ChatFormatting.RED + "Event is not active")),
+            Pattern.compile(ChatFormatting.RED + "(Event is not active|You do not meet the requirements)")),
     COMPLETED(Pattern.compile(ChatFormatting.GREEN + "Already completed"), null);
 
     private final Pattern statusPattern;

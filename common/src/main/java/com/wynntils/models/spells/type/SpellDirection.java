@@ -1,29 +1,35 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.spells.type;
 
-import com.wynntils.utils.mc.McUtils;
+import com.wynntils.utils.mc.MouseUtils;
 import java.util.Arrays;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
-import net.minecraft.world.InteractionHand;
 
 public enum SpellDirection {
-    RIGHT(() -> McUtils.sendSequencedPacket(id -> new ServerboundUseItemPacket(
-            InteractionHand.MAIN_HAND,
-            id,
-            McUtils.player().getXRot(),
-            McUtils.player().getYRot()))),
-    LEFT(() -> McUtils.sendPacket(new ServerboundSwingPacket(InteractionHand.MAIN_HAND)));
+    RIGHT("\uE101", "\uE104", MouseUtils::sendRightClickInput),
+    LEFT("\uE100", "\uE103", MouseUtils::sendLeftClickInput);
 
+    private final String fullIcon;
+    private final String smallIcon;
     private final Runnable sendPacketRunnable;
 
     public static final SpellDirection[] NO_SPELL = new SpellDirection[0];
 
-    SpellDirection(Runnable sendPacketRunnable) {
+    SpellDirection(String fullIcon, String smallIcon, Runnable sendPacketRunnable) {
+        this.fullIcon = fullIcon;
+        this.smallIcon = smallIcon;
         this.sendPacketRunnable = sendPacketRunnable;
+    }
+
+    // Icons used in the font\hud\gameplay\default\bottom_middle font
+    public String getFullIcon() {
+        return fullIcon;
+    }
+
+    public String getSmallIcon() {
+        return smallIcon;
     }
 
     public Runnable getSendPacketRunnable() {

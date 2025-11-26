@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.lootrun.markers;
@@ -7,7 +7,7 @@ package com.wynntils.models.lootrun.markers;
 import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Models;
 import com.wynntils.features.combat.CustomLootrunBeaconsFeature;
-import com.wynntils.models.beacons.type.LootrunBeaconKind;
+import com.wynntils.models.lootrun.beacons.LootrunBeaconKind;
 import com.wynntils.models.lootrun.type.TaskPrediction;
 import com.wynntils.models.marker.type.MarkerInfo;
 import com.wynntils.models.marker.type.MarkerProvider;
@@ -34,7 +34,7 @@ public class LootrunBeaconMarkerProvider implements MarkerProvider<MarkerPoi> {
             newTaskMarkers.add(new MarkerInfo(
                     EnumUtils.toNiceString(entry.getKey()) + " Beacon",
                     new StaticLocationSupplier(entry.getValue().taskLocation().location()),
-                    entry.getValue().taskLocation().taskType().getTexture(),
+                    entry.getValue().lootrunMarker().getTaskType().getTexture(),
                     entry.getKey().getDisplayColor(),
                     CommonColors.WHITE,
                     entry.getKey().getDisplayColor(),
@@ -43,7 +43,7 @@ public class LootrunBeaconMarkerProvider implements MarkerProvider<MarkerPoi> {
                                     .showAdditionalTextInWorld
                                     .get()
                             ? entry.getValue().taskLocation().name() + " - "
-                                    + entry.getValue().beacon().color().name()
+                                    + entry.getKey().name()
                             : null));
         }
         taskMarkers = newTaskMarkers;

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.character;
@@ -7,93 +7,66 @@ package com.wynntils.models.character;
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Model;
 import com.wynntils.core.components.Models;
-import com.wynntils.core.persisted.Persisted;
-import com.wynntils.core.persisted.storage.Storage;
 import com.wynntils.core.text.StyledText;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
 import com.wynntils.handlers.container.scriptedquery.QueryBuilder;
 import com.wynntils.handlers.container.scriptedquery.QueryStep;
 import com.wynntils.handlers.container.scriptedquery.ScriptedContainerQuery;
 import com.wynntils.handlers.container.type.ContainerContent;
 import com.wynntils.mc.event.ContainerClickEvent;
-import com.wynntils.mc.event.MenuEvent.MenuClosedEvent;
-import com.wynntils.mc.event.PlayerTeleportEvent;
-import com.wynntils.models.character.event.CharacterDeathEvent;
+import com.wynntils.mc.event.SetLocalPlayerVehicleEvent;
 import com.wynntils.models.character.event.CharacterUpdateEvent;
 import com.wynntils.models.character.type.ClassType;
+import com.wynntils.models.character.type.VehicleType;
 import com.wynntils.models.containers.ContainerModel;
 import com.wynntils.models.items.items.gui.CharacterItem;
 import com.wynntils.models.worlds.event.WorldStateEvent;
 import com.wynntils.models.worlds.type.WorldState;
 import com.wynntils.utils.mc.LoreUtils;
 import com.wynntils.utils.mc.McUtils;
-import com.wynntils.utils.mc.type.Location;
-import com.wynntils.utils.type.ConfirmedBoolean;
 import com.wynntils.utils.wynn.InventoryUtils;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import net.minecraft.core.Position;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
+import org.lwjgl.glfw.GLFW;
 
+/**
+ * Tracks persistent metadata about the player's selected character, such as
+ * class type, level, reskin status, and unique character ID. This model is concerned with
+ * long-lived identity and conceptual properties rather than transient
+ * in-world behavior.
+ */
 public final class CharacterModel extends Model {
     private static final Pattern CHARACTER_ID_PATTERN = Pattern.compile("^[a-z0-9]{8}$");
     private static final Pattern INFO_MENU_CLASS_PATTERN = Pattern.compile("§7Class: §f(.+)");
     private static final Pattern INFO_MENU_LEVEL_PATTERN = Pattern.compile("§7Combat Lv: §f(\\d+)");
-    // Test in CharacterModel_SILVERBULL_PATTERN
-    private static final Pattern SILVERBULL_PATTERN = Pattern.compile("§7Subscription: §[ac][✖✔] ((?:Ina|A)ctive)");
-    // Test in CharacterModel_SILVERBULL_DURATION_PATTERN
-    private static final Pattern SILVERBULL_DURATION_PATTERN = Pattern.compile(
-            "§7Expiration: §f(?:(?<weeks>\\d+) weeks?)? ?(?:(?<days>\\d+) days?)? ?(?:(?<hours>\\d+) hours?)? ?(?:(?<minutes>\\d+) minutes?)? ?(?:(?<seconds>\\d+) seconds?)?");
-    // Test in CharacterModel_VETERAN_PATTERN
-    private static final Pattern VETERAN_PATTERN = Pattern.compile("§7Rank: §[6dba]Vet");
-    private static final Pattern SILVERBULL_JOIN_PATTERN =
-            Pattern.compile("§3Welcome to the §b✮ Silverbull Trading Company§3!");
-    private static final Pattern SILVERBULL_UPDATE_PATTERN = Pattern.compile("§7Your subscription has been extended.");
 
-    private static final int RANK_SUBSCRIPTION_INFO_SLOT = 0;
     public static final int CHARACTER_INFO_SLOT = 7;
     private static final int PROFESSION_INFO_SLOT = 17;
-    private static final int COSMETICS_SLOT = 25;
-    private static final int COSMETICS_BACK_SLOT = 9;
     public static final int GUILD_MENU_SLOT = 26;
 
-    // we need a .* in front because the message may have a custom timestamp prefix (or some other mod could do
-    // something weird)
-    private static final Pattern WYNN_DEATH_MESSAGE = Pattern.compile(".*§4§lYou have died\\.\\.\\.");
-    private Position lastPositionBeforeTeleport;
-    private Location lastDeathLocation;
-
-    private boolean inCharacterSelection;
     private boolean hasCharacter;
 
-    private ClassType classType;
+    private ClassType classType = ClassType.NONE;
     private boolean reskinned;
     private int level;
-
-    @Persisted
-    private final Storage<Boolean> isVeteran = new Storage<>(false);
-
-    @Persisted
-    private final Storage<Long> silverbullExpiresAt = new Storage<>(0L);
-
-    @Persisted
-    private final Storage<ConfirmedBoolean> silverbullSubscriber = new Storage<>(ConfirmedBoolean.UNCONFIRMED);
 
     // A hopefully unique string for each character ("class"). This is part of the
     // full character uuid, as presented by Wynncraft in the tooltip.
     private String id = "-";
 
+    private String previousScanId = "";
+
+    private VehicleType vehicle = VehicleType.NONE;
+
     public CharacterModel() {
         super(List.of());
-    }
-
-    public boolean isSilverbullSubscriber() {
-        return silverbullSubscriber.get() == ConfirmedBoolean.TRUE;
     }
 
     public ClassType getClassType() {
@@ -126,18 +99,9 @@ public final class CharacterModel extends Model {
         return id;
     }
 
-    public boolean isVeteran() {
-        return isVeteran.get();
-    }
-
     // FIXME: Remove if this is not needed, or fix it for 2.1
     public boolean isHuntedMode() {
         return false;
-    }
-
-    @SubscribeEvent
-    public void onMenuClosed(MenuClosedEvent e) {
-        inCharacterSelection = false;
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -145,12 +109,6 @@ public final class CharacterModel extends Model {
         // Whenever we're leaving a world, clear the current character
         if (e.getOldState() == WorldState.WORLD) {
             hasCharacter = false;
-            // This should not be needed, but have it as a safeguard
-            inCharacterSelection = false;
-        }
-
-        if (e.getNewState() == WorldState.CHARACTER_SELECTION) {
-            inCharacterSelection = true;
         }
 
         if (e.getNewState() == WorldState.WORLD) {
@@ -158,54 +116,36 @@ public final class CharacterModel extends Model {
             updateCharacterId();
 
             // We need to scan character info and profession info as well.
-            scanCharacterInfo(e.isFirstJoinWorld());
+            scanCharacterInfo();
         }
-    }
-
-    @SubscribeEvent
-    public void onChatReceived(ChatMessageReceivedEvent e) {
-        StyledText message = e.getOriginalStyledText();
-
-        if (message.matches(WYNN_DEATH_MESSAGE)) {
-            lastDeathLocation = Location.containing(lastPositionBeforeTeleport);
-            CharacterDeathEvent deathEvent = new CharacterDeathEvent(lastDeathLocation);
-            WynntilsMod.postEvent(deathEvent);
-
-            if (deathEvent.isCanceled()) {
-                e.setCanceled(true);
-            }
-            return;
-        }
-
-        StyledText trimmedMessage = message.trim();
-        if (trimmedMessage.matches(SILVERBULL_JOIN_PATTERN)) {
-            silverbullSubscriber.store(ConfirmedBoolean.TRUE);
-            return;
-        }
-
-        if (trimmedMessage.matches(SILVERBULL_UPDATE_PATTERN)) {
-            silverbullSubscriber.store(ConfirmedBoolean.TRUE);
-            return;
-        }
-    }
-
-    @SubscribeEvent
-    public void beforePlayerTeleport(PlayerTeleportEvent e) {
-        if (McUtils.player() == null) return;
-        lastPositionBeforeTeleport = McUtils.player().position();
     }
 
     @SubscribeEvent
     public void onContainerClick(ContainerClickEvent e) {
-        if (inCharacterSelection) {
-            if (!parseCharacter(e.getItemStack())) return;
-            hasCharacter = true;
-            WynntilsMod.postEvent(new CharacterUpdateEvent());
-            WynntilsMod.info("Selected character " + getCharacterString());
+        if (Models.WorldState.getCurrentState() == WorldState.CHARACTER_SELECTION
+                && e.getMouseButton() != GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+            handleSelectedCharacter(e.getItemStack());
         }
     }
 
-    public void scanCharacterInfo(boolean forceParseEverything) {
+    public void handleSelectedCharacter(ItemStack itemStack) {
+        if (!parseCharacter(itemStack)) return;
+        hasCharacter = true;
+        WynntilsMod.info("Selected character " + getCharacterString());
+    }
+
+    public void setSelectedCharacterFromCharacterSelection(ClassType classType, boolean isReskinned, int level) {
+        hasCharacter = true;
+        updateCharacterInfo(classType, isReskinned, level);
+        WynntilsMod.info("Selected character " + getCharacterString());
+    }
+
+    public void scanCharacterInfo() {
+        if (id.equals(previousScanId)) {
+            hasCharacter = true;
+            return;
+        }
+
         WynntilsMod.info("Scheduling character info query");
         QueryBuilder queryBuilder = ScriptedContainerQuery.builder("Character Info Query");
         queryBuilder.onError(msg -> WynntilsMod.warn("Error querying Character Info: " + msg));
@@ -215,26 +155,36 @@ public final class CharacterModel extends Model {
                 .expectContainerTitle(ContainerModel.CHARACTER_INFO_NAME)
                 .processIncomingContainer(this::parseCharacterContainer));
 
-        if (forceParseEverything
-                || silverbullSubscriber.get() == ConfirmedBoolean.UNCONFIRMED
-                || (silverbullSubscriber.get() != ConfirmedBoolean.FALSE
-                        && System.currentTimeMillis() > silverbullExpiresAt.get())) {
-            // Open Cosmetics Menu
-            queryBuilder
-                    .then(QueryStep.clickOnSlot(COSMETICS_SLOT)
-                            .expectContainerTitle(ContainerModel.COSMETICS_MENU_NAME)
-                            .processIncomingContainer(this::parseCratesBombsCosmeticsContainer))
-                    .then(QueryStep.clickOnSlot(COSMETICS_BACK_SLOT)
-                            .expectContainerTitle(ContainerModel.CHARACTER_INFO_NAME));
-        } else {
-            WynntilsMod.info("Skipping silverbull subscription query ("
-                    + (silverbullExpiresAt.get() - System.currentTimeMillis()) + " ms left)");
-        }
-
         // Scan guild container, if the player is in a guild
         Models.Guild.addGuildContainerQuerySteps(queryBuilder);
 
         queryBuilder.build().executeQuery();
+
+        previousScanId = id;
+    }
+
+    public VehicleType getVehicle() {
+        return vehicle;
+    }
+
+    public void setVehicle(VehicleType vehicle) {
+        this.vehicle = vehicle;
+    }
+
+    @SubscribeEvent
+    public void onVehicleSet(SetLocalPlayerVehicleEvent event) {
+        if (event.getVehicle() == null) {
+            setVehicle(VehicleType.NONE);
+            return;
+        }
+        Entity vehicle = event.getVehicle();
+        if (vehicle instanceof AbstractHorse) {
+            setVehicle(VehicleType.HORSE);
+        } else if (vehicle instanceof Display) {
+            setVehicle(VehicleType.DISPLAY);
+        } else {
+            setVehicle(VehicleType.OTHER);
+        }
     }
 
     private void parseCharacterContainer(ContainerContent container) {
@@ -249,48 +199,6 @@ public final class CharacterModel extends Model {
         hasCharacter = true;
         WynntilsMod.postEvent(new CharacterUpdateEvent());
         WynntilsMod.info("Deducing character " + getCharacterString());
-    }
-
-    private void parseCratesBombsCosmeticsContainer(ContainerContent container) {
-        ItemStack rankSubscriptionItem = container.items().get(RANK_SUBSCRIPTION_INFO_SLOT);
-
-        Matcher veteran = LoreUtils.matchLoreLine(rankSubscriptionItem, 0, VETERAN_PATTERN);
-
-        isVeteran.store(veteran.matches());
-
-        Matcher status = LoreUtils.matchLoreLine(rankSubscriptionItem, 0, SILVERBULL_PATTERN);
-        if (!status.matches()) {
-            WynntilsMod.warn("Could not parse Silverbull subscription status from item: "
-                    + LoreUtils.getLore(rankSubscriptionItem));
-            silverbullSubscriber.store(ConfirmedBoolean.FALSE);
-            return;
-        }
-
-        silverbullSubscriber.store(status.group(1).equals("Active") ? ConfirmedBoolean.TRUE : ConfirmedBoolean.FALSE);
-        if (silverbullSubscriber.get() != ConfirmedBoolean.TRUE) return;
-
-        Matcher expiry = LoreUtils.matchLoreLine(rankSubscriptionItem, 1, SILVERBULL_DURATION_PATTERN);
-        if (!expiry.matches()) {
-            WynntilsMod.warn("Could not parse Silverbull subscription expiry from item: "
-                    + LoreUtils.getLore(rankSubscriptionItem));
-            silverbullExpiresAt.store(0L);
-            return;
-        }
-        int weeks = expiry.group("weeks") == null ? 0 : Integer.parseInt(expiry.group("weeks"));
-        int days = expiry.group("days") == null ? 0 : Integer.parseInt(expiry.group("days"));
-        int hours = expiry.group("hours") == null ? 0 : Integer.parseInt(expiry.group("hours"));
-        int minutes = expiry.group("minutes") == null ? 0 : Integer.parseInt(expiry.group("minutes"));
-        int seconds = expiry.group("seconds") == null ? 0 : Integer.parseInt(expiry.group("seconds"));
-
-        long expiryTime = System.currentTimeMillis()
-                + TimeUnit.DAYS.toMillis(weeks * 7L + days)
-                + TimeUnit.HOURS.toMillis(hours)
-                + TimeUnit.MINUTES.toMillis(minutes)
-                + TimeUnit.SECONDS.toMillis(seconds);
-        silverbullExpiresAt.store(expiryTime);
-
-        WynntilsMod.info(
-                "Parsed Silverbull subscription status: " + silverbullSubscriber.get() + ", expires at: " + expiryTime);
     }
 
     private void updateCharacterId() {
@@ -312,20 +220,19 @@ public final class CharacterModel extends Model {
                 + classType + ", reskinned="
                 + reskinned + ", level="
                 + level + ", id="
-                + id + ", silverbullSubscriber="
-                + silverbullSubscriber.get() + '}';
+                + id + '}';
     }
 
     private void parseCharacterFromCharacterMenu(ItemStack characterInfoItem) {
         List<StyledText> lore = LoreUtils.getLore(characterInfoItem);
 
-        int level = 0;
+        int foundLevel = 0;
         String className = "";
 
         for (StyledText line : lore) {
             Matcher levelMatcher = line.getMatcher(INFO_MENU_LEVEL_PATTERN);
             if (levelMatcher.matches()) {
-                level = Integer.parseInt(levelMatcher.group(1));
+                foundLevel = Integer.parseInt(levelMatcher.group(1));
                 continue;
             }
 
@@ -335,9 +242,9 @@ public final class CharacterModel extends Model {
                 className = classMatcher.group(1);
             }
         }
-        ClassType classType = ClassType.fromName(className);
+        ClassType foundClassType = ClassType.fromName(className);
 
-        updateCharacterInfo(classType, classType != null && ClassType.isReskinned(className), level);
+        updateCharacterInfo(foundClassType, foundClassType != null && ClassType.isReskinned(className), foundLevel);
     }
 
     private boolean parseCharacter(ItemStack itemStack) {

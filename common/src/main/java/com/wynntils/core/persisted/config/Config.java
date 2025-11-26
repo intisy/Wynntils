@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.persisted.config;
@@ -30,12 +30,12 @@ public class Config<T> extends PersistedValue<T> {
 
     @Override
     public void store(T value) {
-        Managers.Persisted.setRaw(this, value);
+        setWithoutTouch(value);
         // For now, do not call touch() on configs
     }
 
     // FIXME: Old ways of setting the value. These should be unified, but since
-    // they have slightly different semantics, let's do it carfeully step by step.
+    // they have slightly different semantics, let's do it carefully step by step.
 
     public void setValue(T value) {
         if (value == null && !getMetadata().allowNull()) {
@@ -44,7 +44,7 @@ public class Config<T> extends PersistedValue<T> {
             return;
         }
 
-        Managers.Persisted.setRaw(this, value);
+        setWithoutTouch(value);
         ((Configurable) getMetadata().owner()).updateConfigOption(this);
         this.userEdited = true;
     }
@@ -139,6 +139,7 @@ public class Config<T> extends PersistedValue<T> {
             Class<?> wrapped = ClassUtils.primitiveToWrapper(((Class<?>) getType()));
             return (T) wrapped.getConstructor(String.class).newInstance(value);
         } catch (Exception ignored) {
+            WynntilsMod.error("Error in Config while parsing value for type " + getType() + " with value " + value);
         }
 
         // couldn't parse value

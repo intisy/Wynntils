@@ -34,14 +34,14 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.GraphicsStatus;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Position;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 
@@ -189,6 +189,11 @@ public final class LootrunPathsService extends Service {
             McUtils.sendMessageToClient(Component.translatable(
                             "service.wynntils.lootrunPaths.lootrunStart", start.getX(), start.getY(), start.getZ())
                     .withStyle(ChatFormatting.GREEN));
+
+            if (McUtils.mc().options.graphicsMode().get() == GraphicsStatus.FABULOUS) {
+                McUtils.sendMessageToClient(Component.translatable("service.wynntils.lootrunPaths.fabulousWarning")
+                        .withStyle(ChatFormatting.RED));
+            }
         } else {
             McUtils.sendErrorToClient(I18n.get("service.wynntils.lootrunPaths.lootrunCouldNotBeLoaded", fileName));
         }
@@ -300,14 +305,14 @@ public final class LootrunPathsService extends Service {
     }
 
     @SubscribeEvent
-    public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+    public void onRightClick(PlayerInteractEvent.InteractAt event) {
         if (state != LootrunState.RECORDING) return;
 
-        BlockState block = event.getWorld().getBlockState(event.getPos());
-        if (!block.is(Blocks.CHEST)) return;
-
-        BlockPos pos = event.getPos();
-        recordingInformation.setLastChest(pos);
+        Entity entity = event.getEntityHitResult().getEntity();
+        if (entity != null && entity.getType() == EntityType.SLIME) {
+            // We don't actually know if this is a chest, but it's a good enough guess.
+            recordingInformation.setLastChest(entity.blockPosition());
+        }
     }
 
     @SubscribeEvent

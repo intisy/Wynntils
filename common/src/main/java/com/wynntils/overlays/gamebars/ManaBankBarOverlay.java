@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.gamebars;
@@ -37,7 +37,7 @@ public class ManaBankBarOverlay extends ManaBarOverlay {
 
     @Override
     public BossBarProgress progress() {
-        return Models.BossBar.manaBankBar.getBarProgress();
+        return Models.Ability.manaBankBar.getBarProgress();
     }
 
     @Override
@@ -46,8 +46,8 @@ public class ManaBankBarOverlay extends ManaBarOverlay {
     }
 
     @Override
-    public boolean isActive() {
-        return Models.BossBar.manaBankBar.isActive();
+    public boolean isVisible() {
+        return Models.Ability.manaBankBar.isActive();
     }
 
     @Override

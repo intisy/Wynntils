@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.services.hades;
@@ -9,6 +9,8 @@ import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.components.Service;
 import com.wynntils.core.components.Services;
+import com.wynntils.core.persisted.Persisted;
+import com.wynntils.core.persisted.storage.Storage;
 import com.wynntils.features.players.HadesFeature;
 import com.wynntils.hades.objects.HadesConnection;
 import com.wynntils.hades.protocol.builders.HadesNetworkBuilder;
@@ -19,20 +21,35 @@ import com.wynntils.hades.protocol.packets.client.HCPacketPing;
 import com.wynntils.hades.protocol.packets.client.HCPacketSocialUpdate;
 import com.wynntils.hades.protocol.packets.client.HCPacketUpdateStatus;
 import com.wynntils.hades.protocol.packets.client.HCPacketUpdateWorld;
+import com.wynntils.mc.event.ChangeCarriedItemEvent;
+import com.wynntils.mc.event.SetSlotEvent;
 import com.wynntils.mc.event.TickEvent;
 import com.wynntils.models.character.event.CharacterUpdateEvent;
+import com.wynntils.models.inventory.type.InventoryAccessory;
+import com.wynntils.models.inventory.type.InventoryArmor;
+import com.wynntils.models.items.WynnItem;
+import com.wynntils.models.items.encoding.type.EncodingSettings;
+import com.wynntils.models.items.items.game.CraftedGearItem;
 import com.wynntils.models.players.event.HadesRelationsUpdateEvent;
 import com.wynntils.models.worlds.event.WorldStateEvent;
 import com.wynntils.models.worlds.type.WorldState;
 import com.wynntils.services.athena.event.AthenaLoginEvent;
 import com.wynntils.services.hades.event.HadesEvent;
+import com.wynntils.services.hades.type.GearShareOptions;
 import com.wynntils.services.hades.type.PlayerStatus;
-import com.wynntils.services.map.pois.PlayerMainMapPoi;
-import com.wynntils.services.map.pois.PlayerMiniMapPoi;
+import com.wynntils.utils.EncodedByteBuffer;
 import com.wynntils.utils.mc.McUtils;
+import com.wynntils.utils.type.CappedValue;
+import com.wynntils.utils.type.ErrorOr;
+import java.io.IOException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -50,40 +67,48 @@ public final class HadesService extends Service {
     private static final int TICKS_PER_UPDATE = 2;
     private static final int MS_PER_PING = 1000;
 
+    private static final EncodingSettings HADES_ENCODING_SETTINGS = new EncodingSettings(false, false);
+
     private final HadesUserRegistry userRegistry = new HadesUserRegistry();
 
+    private CompletableFuture<Void> connectionFuture;
     private HadesConnection hadesConnection;
     private int tickCountUntilUpdate = 0;
     private PlayerStatus lastSentStatus;
     private ScheduledExecutorService pingScheduler;
 
+    @Persisted
+    private final Storage<GearShareOptions> gearShareOptions = new Storage<>(new GearShareOptions());
+
+    // Original WynnItem cache to avoid unnecessary encoding
+    private NavigableMap<InventoryArmor, WynnItem> armorCache = new TreeMap<>();
+    private NavigableMap<InventoryAccessory, WynnItem> accessoriesCache = new TreeMap<>();
+    private WynnItem heldItemCache = null;
+    // Encoded items to be sent
+    private final Map<InventoryArmor, String> armor = new TreeMap<>();
+    private final Map<InventoryAccessory, String> accessories = new TreeMap<>();
+    private String heldItem = "";
+
     public HadesService() {
         super(List.of());
-    }
-
-    public Stream<PlayerMainMapPoi> getPlayerPois(boolean renderRemotePartyPlayers, boolean renderRemoteFriendPlayers) {
-        return getHadesUsers()
-                .filter(hadesUser -> (hadesUser.isPartyMember() && renderRemotePartyPlayers)
-                        || (hadesUser.isMutualFriend() && renderRemoteFriendPlayers))
-                .map(PlayerMainMapPoi::new);
-    }
-
-    public Stream<PlayerMiniMapPoi> getMiniPlayerPois(
-            boolean renderRemotePartyPlayers, boolean renderRemoteFriendPlayers) {
-        return getHadesUsers()
-                .filter(hadesUser -> (hadesUser.isPartyMember() && renderRemotePartyPlayers)
-                        || (hadesUser.isMutualFriend() && renderRemoteFriendPlayers))
-                .map(PlayerMiniMapPoi::new);
     }
 
     public Stream<HadesUser> getHadesUsers() {
         return userRegistry.getHadesUserMap().values().stream();
     }
 
+    public Optional<HadesUser> getHadesUser(UUID uuid) {
+        return userRegistry.getUser(uuid);
+    }
+
     private void login() {
-        // Try to log in to Hades, if we're not already connected
-        if (!isConnected()) {
-            tryCreateConnection();
+        connect();
+    }
+
+    private synchronized void connect() {
+        // Try to log in to Hades, if we're not already connected or trying to connect
+        if (!isConnected() && (connectionFuture == null || connectionFuture.isDone())) {
+            connectionFuture = CompletableFuture.runAsync(this::tryCreateConnection);
         }
     }
 
@@ -98,14 +123,15 @@ public final class HadesService extends Service {
 
             tickCountUntilUpdate = 0;
             lastSentStatus = null;
-        } catch (UnknownHostException e) {
-            WynntilsMod.error("Could not resolve Hades host address.", e);
+        } catch (IOException e) {
+            WynntilsMod.error("Could not connect to Hades.", e);
         }
     }
 
     public void tryDisconnect() {
         if (hadesConnection != null && hadesConnection.isOpen()) {
             hadesConnection.disconnect();
+            connectionFuture = null;
         }
     }
 
@@ -127,6 +153,7 @@ public final class HadesService extends Service {
         if (pingScheduler == null) return;
         pingScheduler.shutdown();
         pingScheduler = null;
+        connectionFuture = null;
     }
 
     private void sendPing() {
@@ -162,11 +189,22 @@ public final class HadesService extends Service {
     }
 
     @SubscribeEvent
+    public void onGuildMemberListUpdate(HadesRelationsUpdateEvent.GuildMemberList event) {
+        if (!isConnected()) return;
+        if (!Managers.Feature.getFeatureInstance(HadesFeature.class)
+                .shareWithGuild
+                .get()) return;
+
+        hadesConnection.sendPacket(new HCPacketSocialUpdate(
+                event.getChangedPlayers().stream().toList(),
+                event.getChangeType().getPacketAction(),
+                SocialType.GUILD));
+    }
+
+    @SubscribeEvent
     public void onWorldStateChange(WorldStateEvent event) {
-        if (event.getNewState() != WorldState.NOT_CONNECTED && !isConnected()) {
-            if (Services.WynntilsAccount.isLoggedIn()) {
-                tryCreateConnection();
-            }
+        if (event.getNewState() != WorldState.NOT_CONNECTED && Services.WynntilsAccount.isLoggedIn()) {
+            connect();
         }
 
         userRegistry.reset();
@@ -192,6 +230,8 @@ public final class HadesService extends Service {
         }
 
         tryResendWorldData();
+
+        refreshGear();
     }
 
     @SubscribeEvent
@@ -206,6 +246,37 @@ public final class HadesService extends Service {
     @SubscribeEvent
     public void onClassChange(CharacterUpdateEvent event) {
         tryResendWorldData();
+    }
+
+    @SubscribeEvent
+    public void onSetSlot(SetSlotEvent.Post event) {
+        if (!event.getContainer().equals(McUtils.inventory())) return;
+        if (gearShareOptions.get().shouldShare()) {
+            for (InventoryAccessory accessory : InventoryAccessory.values()) {
+                if (event.getSlot() == accessory.getSlot()) {
+                    updateAccessoryCache(accessory);
+                    return;
+                }
+            }
+
+            for (InventoryArmor armorSlot : InventoryArmor.values()) {
+                if (event.getSlot() == armorSlot.getInventorySlot()) {
+                    updateArmorCache(armorSlot);
+                    return;
+                }
+            }
+
+            if (event.getSlot() == McUtils.player().getInventory().selected) {
+                updateHeldItemCache();
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onSwappedItem(ChangeCarriedItemEvent event) {
+        if (gearShareOptions.get().shouldShare()) {
+            updateHeldItemCache();
+        }
     }
 
     @SubscribeEvent
@@ -231,8 +302,32 @@ public final class HadesService extends Service {
             float pY = (float) player.getY();
             float pZ = (float) player.getZ();
 
-            PlayerStatus newStatus =
-                    new PlayerStatus(pX, pY, pZ, Models.CharacterStats.getHealth(), Models.CharacterStats.getMana());
+            PlayerStatus newStatus;
+
+            if (gearShareOptions.get().shouldShare()) {
+                newStatus = new PlayerStatus(
+                        pX,
+                        pY,
+                        pZ,
+                        Models.CharacterStats.getHealth().orElse(CappedValue.EMPTY),
+                        Models.CharacterStats.getMana().orElse(CappedValue.EMPTY),
+                        armor.getOrDefault(InventoryArmor.HELMET, ""),
+                        armor.getOrDefault(InventoryArmor.CHESTPLATE, ""),
+                        armor.getOrDefault(InventoryArmor.LEGGINGS, ""),
+                        armor.getOrDefault(InventoryArmor.BOOTS, ""),
+                        accessories.getOrDefault(InventoryAccessory.RING_1, ""),
+                        accessories.getOrDefault(InventoryAccessory.RING_2, ""),
+                        accessories.getOrDefault(InventoryAccessory.BRACELET, ""),
+                        accessories.getOrDefault(InventoryAccessory.NECKLACE, ""),
+                        heldItem);
+            } else {
+                newStatus = new PlayerStatus(
+                        pX,
+                        pY,
+                        pZ,
+                        Models.CharacterStats.getHealth().orElse(CappedValue.EMPTY),
+                        Models.CharacterStats.getMana().orElse(CappedValue.EMPTY));
+            }
 
             if (newStatus.equals(lastSentStatus)) {
                 tickCountUntilUpdate = 1;
@@ -250,7 +345,16 @@ public final class HadesService extends Service {
                     lastSentStatus.health().current(),
                     lastSentStatus.health().max(),
                     lastSentStatus.mana().current(),
-                    lastSentStatus.mana().max()));
+                    lastSentStatus.mana().max(),
+                    lastSentStatus.helmet(),
+                    lastSentStatus.chestplate(),
+                    lastSentStatus.leggings(),
+                    lastSentStatus.boots(),
+                    lastSentStatus.ringOne(),
+                    lastSentStatus.ringTwo(),
+                    lastSentStatus.bracelet(),
+                    lastSentStatus.necklace(),
+                    lastSentStatus.heldItem()));
         }
     }
 
@@ -272,7 +376,109 @@ public final class HadesService extends Service {
         userRegistry.getHadesUserMap().clear();
     }
 
+    public GearShareOptions getGearShareOptions() {
+        return gearShareOptions.get();
+    }
+
+    public void saveGearShareOptions() {
+        gearShareOptions.touched();
+        refreshGear();
+    }
+
+    private void refreshGear() {
+        if (McUtils.player() == null) return;
+
+        if (gearShareOptions.get().shouldShare()) {
+            for (InventoryArmor inventoryArmor : InventoryArmor.values()) {
+                updateArmorCache(inventoryArmor);
+            }
+
+            for (InventoryAccessory inventoryAccessory : InventoryAccessory.values()) {
+                updateAccessoryCache(inventoryAccessory);
+            }
+
+            updateHeldItemCache();
+        } else {
+            armor.clear();
+            armorCache.clear();
+            accessories.clear();
+            accessoriesCache.clear();
+            heldItem = "";
+            heldItemCache = null;
+        }
+    }
+
     private boolean isConnected() {
         return hadesConnection != null && hadesConnection.isOpen();
+    }
+
+    private void updateArmorCache(InventoryArmor inventoryArmor) {
+        Optional<WynnItem> armorItemOpt =
+                Models.Item.getWynnItem(McUtils.inventory().armor.get(inventoryArmor.getArmorSlot()));
+
+        if (armorItemOpt.isEmpty()
+                || (armorItemOpt.get() instanceof CraftedGearItem
+                        && !gearShareOptions.get().shareCraftedItems())
+                || !gearShareOptions.get().shouldShareArmor(inventoryArmor)) {
+            armor.remove(inventoryArmor);
+            armorCache.remove(inventoryArmor);
+        } else if (!armorCache.containsKey(inventoryArmor)
+                || !armorCache.get(inventoryArmor).equals(armorItemOpt.get())) {
+            this.armor.put(inventoryArmor, encodeItem(armorItemOpt));
+            this.armorCache.put(inventoryArmor, armorItemOpt.get());
+        }
+    }
+
+    private void updateAccessoryCache(InventoryAccessory inventoryAccessory) {
+        Optional<WynnItem> accessoryItemOpt =
+                Models.Item.getWynnItem(McUtils.inventory().getItem(inventoryAccessory.getSlot()));
+
+        if (accessoryItemOpt.isEmpty()
+                || (accessoryItemOpt.get() instanceof CraftedGearItem
+                        && !gearShareOptions.get().shareCraftedItems())
+                || !gearShareOptions.get().shouldShareAccessory(inventoryAccessory)) {
+            accessories.remove(inventoryAccessory);
+            accessoriesCache.remove(inventoryAccessory);
+        } else if (!accessoriesCache.containsKey(inventoryAccessory)
+                || !accessoriesCache.get(inventoryAccessory).equals(accessoryItemOpt.get())) {
+            this.accessories.put(inventoryAccessory, encodeItem(accessoryItemOpt));
+            this.accessoriesCache.put(inventoryAccessory, accessoryItemOpt.get());
+        }
+    }
+
+    private void updateHeldItemCache() {
+        Optional<WynnItem> heldItemOpt =
+                Models.Item.getWynnItem(McUtils.player().getMainHandItem());
+
+        if (heldItemOpt.isEmpty()
+                || (heldItemOpt.get() instanceof CraftedGearItem
+                        && !gearShareOptions.get().shareCraftedItems())
+                || !gearShareOptions.get().shouldShareHeldItem()) {
+            heldItem = "";
+            heldItemCache = null;
+        } else if (heldItemCache == null || !heldItemCache.equals(heldItemOpt.get())) {
+            heldItem = encodeItem(heldItemOpt);
+            heldItemCache = heldItemOpt.get();
+        }
+    }
+
+    private String encodeItem(Optional<WynnItem> item) {
+        if (item.isPresent() && Models.ItemEncoding.canEncodeItem(item.get())) {
+            ErrorOr<EncodedByteBuffer> errorOrEncodedByteBuffer =
+                    Models.ItemEncoding.encodeItem(item.get(), HADES_ENCODING_SETTINGS);
+
+            if (!errorOrEncodedByteBuffer.hasError()) {
+                String itemName = "";
+
+                if (gearShareOptions.get().shareCraftedNames()
+                        && item.get() instanceof CraftedGearItem craftedGearItem) {
+                    itemName = " \"" + craftedGearItem.getName() + "\"";
+                }
+
+                return errorOrEncodedByteBuffer.getValue().toUtf16String() + itemName;
+            }
+        }
+
+        return "";
     }
 }

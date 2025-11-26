@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.players;
@@ -9,7 +9,7 @@ import com.wynntils.core.components.Handlers;
 import com.wynntils.core.components.Model;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.text.StyledText;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
+import com.wynntils.handlers.chat.event.ChatMessageEvent;
 import com.wynntils.handlers.chat.type.MessageType;
 import com.wynntils.models.players.event.FriendsEvent;
 import com.wynntils.models.players.event.HadesRelationsUpdateEvent;
@@ -17,6 +17,7 @@ import com.wynntils.models.worlds.event.WorldStateEvent;
 import com.wynntils.models.worlds.type.WorldState;
 import com.wynntils.services.hades.event.HadesEvent;
 import com.wynntils.utils.mc.McUtils;
+import com.wynntils.utils.mc.StyledTextUtils;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,14 +28,12 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public final class FriendsModel extends Model {
-    // 󏿼󏿿󏿾 is for the first line
-    // 󏿼󐀆  is for the other lines
-    private static final String FRIEND_PREFIX_REGEX =
-            "(?:(?:§a)?(?:\uDAFF\uDFFC\uE008\uDAFF\uDFFF\uE002\uDAFF\uDFFE|\uDAFF\uDFFC\uE001\uDB00\uDC06)\\s)?";
+    // \uE008\uE002 is for the first line
+    // \uE001  is for the other lines
+    private static final String FRIEND_PREFIX_REGEX = "(?:§(?:a|4))?(?:\uE008\uE002|\uE001) ";
 
     // region Friend Regexes
     /*
@@ -46,8 +45,7 @@ public final class FriendsModel extends Model {
     DETAIL (optional) should be a descriptor if necessary
      */
 
-    private static final Pattern FRIEND_LIST =
-            Pattern.compile(FRIEND_PREFIX_REGEX + ".+'s? friends \\(.+\\): (.*)", Pattern.MULTILINE | Pattern.DOTALL);
+    private static final Pattern FRIEND_LIST = Pattern.compile(FRIEND_PREFIX_REGEX + ".+'s? friends \\(.+\\): (.*)");
     private static final Pattern FRIEND_LIST_FAIL_1 =
             Pattern.compile(FRIEND_PREFIX_REGEX + "We couldn't find any friends\\.");
     private static final Pattern FRIEND_LIST_FAIL_2 =
@@ -61,15 +59,13 @@ public final class FriendsModel extends Model {
     private static final Pattern ONLINE_FRIENDS_HEADER = Pattern.compile(FRIEND_PREFIX_REGEX + "Online Friends:");
     // Test in FriendsModel_ONLINE_FRIEND
     private static final Pattern ONLINE_FRIEND =
-            Pattern.compile(FRIEND_PREFIX_REGEX + "§2 - §a(\\w{1,16})§2 \\[Server: §aWC(\\d{1,3})§2]");
+            Pattern.compile(FRIEND_PREFIX_REGEX + "§2 - §a(\\w{1,16})§2 \\[Server: §a([A-Z]+\\d{1,3})§2]");
 
     // Test in FriendsModel_JOIN_PATTERN
     private static final Pattern JOIN_PATTERN = Pattern.compile(
-            FRIEND_PREFIX_REGEX
-                    + "(?<username>\\w{1,16})§2 has logged into server §aWC(?<server>\\d{1,3})§2 as §aan? (?<class>[A-Z][a-z]+)");
+            "§a(?<username>\\w{1,16})§2 has logged into server §a(?<server>[A-Z]+\\d{1,3})§2 as §aan? (?<class>[A-Z][a-z]+)");
     // Test in FriendsModel_LEAVE_PATTERN
-    private static final Pattern LEAVE_PATTERN =
-            Pattern.compile(FRIEND_PREFIX_REGEX + "(?<username>\\w{1,16}) left the game\\.");
+    private static final Pattern LEAVE_PATTERN = Pattern.compile("§a(?<username>\\w{1,16}) left the game\\.");
     // endregion
 
     private static final int REQUEST_RATELIMIT = 250;
@@ -81,7 +77,7 @@ public final class FriendsModel extends Model {
     private long lastOnlineRequest = 0;
 
     private Set<String> friends;
-    private Map<String, Integer> onlineFriends = new HashMap<>(); // <username, server>
+    private Map<String, String> onlineFriends = new HashMap<>(); // <username, server>
 
     public FriendsModel() {
         super(List.of());
@@ -105,17 +101,17 @@ public final class FriendsModel extends Model {
         }
     }
 
-    @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public void onChatReceived(ChatMessageReceivedEvent event) {
+    @SubscribeEvent
+    public void onChatReceived(ChatMessageEvent.Match event) {
         if (event.getMessageType() != MessageType.FOREGROUND) return;
 
-        StyledText styledText = event.getOriginalStyledText();
+        StyledText styledText = StyledTextUtils.unwrap(event.getMessage()).stripAlignment();
         String unformatted = styledText.getStringWithoutFormatting();
 
         Matcher joinMatcher = styledText.getMatcher(JOIN_PATTERN);
         if (joinMatcher.matches()) {
             String username = joinMatcher.group("username");
-            int server = Integer.parseInt(joinMatcher.group("server"));
+            String server = joinMatcher.group("server");
 
             onlineFriends.put(username, server);
             WynntilsMod.postEvent(new FriendsEvent.Joined(username, server));
@@ -135,14 +131,14 @@ public final class FriendsModel extends Model {
 
         if (friendMessageStatus == ListStatus.EXPECTING) {
             if (tryParseFriendList(unformatted) || tryParseNoFriendList(styledText)) {
-                event.setCanceled(true);
+                event.cancelChat();
                 friendMessageStatus = ListStatus.IDLE;
                 return;
             }
 
             // Skip first message of two, but still expect more messages
             if (styledText.getMatcher(FRIEND_LIST_FAIL_1).matches()) {
-                event.setCanceled(true);
+                event.cancelChat();
                 return;
             }
         }
@@ -153,7 +149,7 @@ public final class FriendsModel extends Model {
             // When we detect the first message indicating the start of the friends list, we set a flag
             onlineMessageStatus = ListStatus.PROCESSING;
             onlineFriends.clear();
-            event.setCanceled(true);
+            event.cancelChat();
             return;
         }
         if (onlineMessageStatus == ListStatus.PROCESSING) {
@@ -162,11 +158,11 @@ public final class FriendsModel extends Model {
             Matcher onlineFriendMatcher = styledText.getMatcher(ONLINE_FRIEND);
             if (onlineFriendMatcher.matches()) {
                 String username = onlineFriendMatcher.group(1);
-                int server = Integer.parseInt(onlineFriendMatcher.group(2));
+                String server = onlineFriendMatcher.group(2);
 
                 onlineFriends.put(username, server);
-                WynntilsMod.info("Friend " + username + " is online on WC" + server);
-                event.setCanceled(true);
+                WynntilsMod.info("Friend " + username + " is online on " + server);
+                event.cancelChat();
                 return;
             } else {
                 onlineMessageStatus = ListStatus.IDLE;
@@ -217,11 +213,8 @@ public final class FriendsModel extends Model {
     private boolean tryParseFriendList(String unformatted) {
         Matcher matcher = FRIEND_LIST.matcher(unformatted);
         if (!matcher.matches()) return false;
-
-        String[] friendList = matcher.group(1)
-                .replaceAll(FRIEND_PREFIX_REGEX, "")
-                .replaceAll("\\n", "")
-                .split(", ");
+        String[] friendList =
+                matcher.group(1).replaceAll(FRIEND_PREFIX_REGEX, "").split(", ");
 
         friends = Arrays.stream(friendList).collect(Collectors.toSet());
         WynntilsMod.postEvent(
@@ -273,7 +266,7 @@ public final class FriendsModel extends Model {
         return Collections.unmodifiableSet(friends);
     }
 
-    public Map<String, Integer> getOnlineFriends() {
+    public Map<String, String> getOnlineFriends() {
         return Collections.unmodifiableMap(onlineFriends);
     }
 

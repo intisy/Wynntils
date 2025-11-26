@@ -1,25 +1,26 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.consumers.commands;
 
+import com.wynntils.utils.mc.McUtils;
 import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 
 public class ClientCommandSourceStack extends CommandSourceStack {
     public ClientCommandSourceStack(LocalPlayer player) {
         super(
-                player,
+                new ClientCommandSource(),
                 player.position(),
                 player.getRotationVector(),
                 null,
@@ -43,11 +44,6 @@ public class ClientCommandSourceStack extends CommandSourceStack {
     }
 
     @Override
-    public Stream<ResourceLocation> getRecipeNames() {
-        return null;
-    }
-
-    @Override
     public Set<ResourceKey<Level>> levels() {
         return null;
     }
@@ -55,5 +51,27 @@ public class ClientCommandSourceStack extends CommandSourceStack {
     @Override
     public RegistryAccess registryAccess() {
         return null;
+    }
+
+    private static class ClientCommandSource implements CommandSource {
+        @Override
+        public void sendSystemMessage(Component component) {
+            McUtils.sendMessageToClient(component);
+        }
+
+        @Override
+        public boolean acceptsSuccess() {
+            return true;
+        }
+
+        @Override
+        public boolean acceptsFailure() {
+            return true;
+        }
+
+        @Override
+        public boolean shouldInformAdmins() {
+            return true;
+        }
     }
 }

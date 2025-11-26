@@ -1,56 +1,36 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.ingredients;
 
 import com.wynntils.core.components.Model;
 import com.wynntils.core.components.Models;
-import com.wynntils.core.net.UrlId;
-import com.wynntils.core.net.event.NetResultProcessedEvent;
+import com.wynntils.core.net.DownloadRegistry;
 import com.wynntils.models.ingredients.type.IngredientInfo;
-import com.wynntils.models.wynnitem.WynnItemModel;
 import com.wynntils.models.wynnitem.type.ItemObtainInfo;
-import com.wynntils.models.wynnitem.type.ItemObtainType;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Stream;
 import net.minecraft.ChatFormatting;
-import net.neoforged.bus.api.SubscribeEvent;
 
-public class IngredientModel extends Model {
+public final class IngredientModel extends Model {
     private static final Map<ChatFormatting, Integer> TIER_COLOR_CODES = Map.of(
             ChatFormatting.DARK_GRAY, 0,
             ChatFormatting.YELLOW, 1,
             ChatFormatting.LIGHT_PURPLE, 2,
             ChatFormatting.AQUA, 3);
+
     private final IngredientInfoRegistry ingredientInfoRegistry = new IngredientInfoRegistry();
 
-    public IngredientModel(WynnItemModel wynnItem) {
-        super(List.of(wynnItem));
-
-        // We do not explicitly load the ingredient DB here,
-        // but when all of it's dependencies are loaded,
-        // the NetResultProcessedEvent will trigger the load.
+    public IngredientModel() {
+        super(List.of());
     }
 
     @Override
-    public void reloadData() {
-        ingredientInfoRegistry.loadData();
-    }
-
-    @SubscribeEvent
-    public void onDataLoaded(NetResultProcessedEvent.ForUrlId event) {
-        UrlId urlId = event.getUrlId();
-        if (urlId == UrlId.DATA_STATIC_ITEM_OBTAIN || urlId == UrlId.DATA_STATIC_MATERIAL_CONVERSION) {
-            // We need both material conversio  and obtain info to be able to load the ingredient DB
-            if (!Models.WynnItem.hasObtainInfo()) return;
-            if (!Models.WynnItem.hasMaterialConversionInfo()) return;
-
-            ingredientInfoRegistry.loadData();
-            return;
-        }
+    public void registerDownloads(DownloadRegistry registry) {
+        ingredientInfoRegistry.registerDownloads(registry);
     }
 
     public int getTierFromColorCode(String tierColor) {
@@ -61,11 +41,19 @@ public class IngredientModel extends Model {
         return ingredientInfoRegistry.getFromDisplayName(ingredientName);
     }
 
+    public IngredientInfo getIngredientInfoFromApiName(String ingredientName) {
+        return ingredientInfoRegistry.getFromApiName(ingredientName);
+    }
+
     public List<ItemObtainInfo> getObtainInfo(IngredientInfo ingredientInfo) {
-        List<ItemObtainInfo> obtainInfo = Models.WynnItem.getObtainInfo(ingredientInfo.name());
-        if (obtainInfo == null) {
-            return List.of(new ItemObtainInfo(ItemObtainType.UNKNOWN, Optional.empty()));
+        List<ItemObtainInfo> obtainInfo = new ArrayList<>(ingredientInfo.obtainInfo());
+
+        // If the API gave no info, then use the crowd sourced info
+        if (obtainInfo.size() == 1 && obtainInfo.getFirst().equals(ItemObtainInfo.UNKNOWN)) {
+            obtainInfo.clear();
         }
+
+        obtainInfo.addAll(Models.WynnItem.getObtainInfo(ingredientInfo.name()));
         return obtainInfo;
     }
 

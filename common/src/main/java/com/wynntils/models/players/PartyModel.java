@@ -1,16 +1,15 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.players;
 
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Handlers;
-import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Model;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.text.StyledText;
-import com.wynntils.handlers.chat.event.ChatMessageReceivedEvent;
+import com.wynntils.handlers.chat.event.ChatMessageEvent;
 import com.wynntils.handlers.chat.type.MessageType;
 import com.wynntils.handlers.scoreboard.ScoreboardPart;
 import com.wynntils.mc.event.SetPlayerTeamEvent;
@@ -22,8 +21,10 @@ import com.wynntils.models.worlds.type.WorldState;
 import com.wynntils.services.hades.event.HadesEvent;
 import com.wynntils.utils.mc.McUtils;
 import com.wynntils.utils.mc.StyledTextUtils;
+import com.wynntils.utils.type.Pair;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -32,78 +33,74 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 
 /**
  * This model handles the player's party relations.
  */
 public final class PartyModel extends Model {
-    // 󏿼󏿿󏿾 is for the first line
-    // 󏿼󐀆  is for the other lines
-    private static final String PARTY_PREFIX_REGEX =
-            "(?:(?:§e)?(?:\uDAFF\uDFFC\uE005\uDAFF\uDFFF\uE002\uDAFF\uDFFE|\uDAFF\uDFFC\uE001\uDB00\uDC06)\\s)?";
+    // \uE005\uE002 is for the first line
+    // \uE001  is for the other lines
+    private static final String PARTY_PREFIX_REGEX = "§e(?:\uE005\uE002|\uE001) ";
 
     // region Party Regexes
     /*
-    Regexes should be named with this format:
-    PARTY_ACTION_INVOLVED_(DETAIL)
-    where:
-    PARTY should be the first word in the name
-    ACTION should be something like JOIN, LEAVE, LIST, etc.
-    INVOLVED should be the player that is affected by the action:
-    - ALL should be used if the action affects all players in the party
-    - LEADER should be used if the action affects the party leader
-    - SELF should be used if the action affects the player
-    - OTHER should be used if the action affects another player(s), but not ALL players
-    DETAIL (optional) should be a descriptor if necessary
+    Regexes are now named without any specific format. They are grouped by behaviour.
+    Eg. The player getting kicked and leaving the party are grouped together.
+    Player typically refers to the active user.
+    Other typically refers to some different player in or out of the party.
     */
     // Test in PartyModel_PARTY_LIST_ALL
     private static final Pattern PARTY_LIST_ALL = Pattern.compile(PARTY_PREFIX_REGEX + "Party members: (.*)");
-    private static final Pattern PARTY_LIST_SELF_FAILED =
+    private static final Pattern PARTY_LIST_LEADER = Pattern.compile("§b([a-zA-Z0-9_]+)");
+
+    // General purpose message for all party cmds executed when not in a party
+    private static final Pattern PARTY_COMMAND_FAILED =
             Pattern.compile(PARTY_PREFIX_REGEX + "You must be in a party to use this\\.");
 
-    private static final Pattern PARTY_LEAVE_OTHER =
-            Pattern.compile(PARTY_PREFIX_REGEX + "(\\w{1,16}) has left the party\\.");
-    private static final Pattern PARTY_LEAVE_SELF_ALREADYLEFT =
-            Pattern.compile(PARTY_PREFIX_REGEX + "You must be in a party to leave\\.");
+    // Some messages have no periods. Add them back if/when Wynn does.
+    // Player is no longer in a party
+    private static final Pattern PARTY_PLAYER_LEFT =
+            Pattern.compile(PARTY_PREFIX_REGEX + "You have left your current party");
+    private static final Pattern PARTY_PLAYER_KICKED =
+            Pattern.compile(PARTY_PREFIX_REGEX + "You have been kicked from your party");
+    private static final Pattern PARTY_PLAYER_DISBANDED =
+            Pattern.compile(PARTY_PREFIX_REGEX + "Your party has been disbanded");
 
-    // This is a special case; Wynn sends the same message for when we leave a party or get kicked from a party
-    private static final Pattern PARTY_LEAVE_SELF_KICK =
-            Pattern.compile(PARTY_PREFIX_REGEX + "You have been removed from the party\\.");
-
-    private static final Pattern PARTY_JOIN_OTHER =
-            Pattern.compile(PARTY_PREFIX_REGEX + "(\\w{1,16}) has joined your party, say hello!");
-    private static final Pattern PARTY_JOIN_OTHER_SWITCH =
-            Pattern.compile(PARTY_PREFIX_REGEX + "Say hello to (\\w{1,16}) which just joined your party!");
-    private static final Pattern PARTY_JOIN_SELF =
-            Pattern.compile(PARTY_PREFIX_REGEX + "You have successfully joined the party\\.");
-
-    private static final Pattern PARTY_PROMOTE_OTHER =
-            Pattern.compile(PARTY_PREFIX_REGEX + "Successfully promoted (.+) to party leader!");
-    private static final Pattern PARTY_PROMOTE_SELF = Pattern.compile(
-            PARTY_PREFIX_REGEX + "You are now the leader of this party! Type /party for a list of commands\\.");
-
-    private static final Pattern PARTY_DISBAND_ALL =
-            Pattern.compile(PARTY_PREFIX_REGEX + "Your party has been disbanded\\.");
-    private static final Pattern PARTY_DISBAND_SELF = Pattern.compile(
-            PARTY_PREFIX_REGEX + "Your party has been disbanded since you were the only member remaining\\.");
-
-    private static final Pattern PARTY_CREATE_SELF =
+    // Player has joined some party
+    private static final Pattern PARTY_PLAYER_CREATED =
             Pattern.compile(PARTY_PREFIX_REGEX + "You have successfully created a party\\.");
+    // This part is iffy, there is no longer any successfully joined message.
+    // Instead, the other player has joined message is used when the player joins any new party.
+    // So effectively other than party creations, anyone joining will trigger this message.
+    // We also will have no idea of the party state when we ourselves join and get this message (so req party list)
+    private static final Pattern PARTY_SOMEONE_JOINED =
+            Pattern.compile(PARTY_PREFIX_REGEX + "(.+) has joined your party, say hello!");
+
+    // Other player is no longer in the party
+    private static final Pattern PARTY_OTHER_LEFT = Pattern.compile(PARTY_PREFIX_REGEX + "(.+) has left the party!");
+    private static final Pattern PARTY_OTHER_KICKED =
+            Pattern.compile(PARTY_PREFIX_REGEX + "(.+) has been kicked from the party!");
+
+    // New party leader
+    private static final Pattern PARTY_NEW_LEADER =
+            Pattern.compile(PARTY_PREFIX_REGEX + "(?:§c)?(.+)§e is now the Party Leader!.*");
+
+    // Temporary party event over, previous party restored
+    // This actually means nothing of value to us so just re-request
+    private static final Pattern PARTY_RESTORED_SELF =
+            Pattern.compile(PARTY_PREFIX_REGEX + "Your previous party was restored");
 
     private static final Pattern PARTY_INVITED =
-            Pattern.compile(PARTY_PREFIX_REGEX + "\\s+You have been invited to join (\\w{1,16})'s? party!");
-
-    private static final Pattern PARTY_KICK_OTHER =
-            Pattern.compile(PARTY_PREFIX_REGEX + "You have kicked the player from the party\\.");
+            Pattern.compile("(?:" + PARTY_PREFIX_REGEX + "|\\s+§e)You have been invited to join (.+)'s? party!\\s*");
     // endregion
 
     private static final ScoreboardPart PARTY_SCOREBOARD_PART = new PartyScoreboardPart();
 
+    public static final int MAX_PARTY_MEMBER_COUNT = 10;
+
     private boolean expectingPartyMessage = false; // Whether the client is expecting a response from "/party list"
     private long lastPartyRequest = 0; // The last time the client requested party data
-    private boolean nextKickHandled = false; // Whether the next "/party kick" sent by the client is being handled
 
     private boolean inParty; // Whether the player is in a party
     private String partyLeader = null; // The name of the party leader
@@ -134,17 +131,17 @@ public final class PartyModel extends Model {
         }
     }
 
-    @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public void onChatReceived(ChatMessageReceivedEvent event) {
+    @SubscribeEvent
+    public void onChatReceived(ChatMessageEvent.Match event) {
         if (event.getMessageType() != MessageType.FOREGROUND) return;
 
-        StyledText chatMessage = event.getOriginalStyledText();
+        StyledText chatMessage = StyledTextUtils.unwrap(event.getMessage()).stripAlignment();
 
         if (tryParsePartyMessages(chatMessage)) return;
 
         if (expectingPartyMessage) {
             if (tryParseNoPartyMessage(chatMessage) || tryParsePartyList(chatMessage)) {
-                event.setCanceled(true);
+                event.cancelChat();
                 expectingPartyMessage = false;
                 return;
             }
@@ -152,7 +149,7 @@ public final class PartyModel extends Model {
     }
 
     private boolean tryParsePartyMessages(StyledText styledText) {
-        if (styledText.matches(PARTY_CREATE_SELF)) {
+        if (styledText.matches(PARTY_PLAYER_CREATED)) {
             WynntilsMod.info("Player created a new party.");
 
             inParty = true;
@@ -164,51 +161,49 @@ public final class PartyModel extends Model {
             return true;
         }
 
-        if (styledText.matches(PARTY_DISBAND_ALL)
-                || styledText.matches(PARTY_LEAVE_SELF_KICK)
-                || styledText.matches(PARTY_LEAVE_SELF_ALREADYLEFT)
-                || styledText.matches(PARTY_DISBAND_SELF)) {
-            WynntilsMod.info("Player left the party.");
+        if (styledText.matches(PARTY_PLAYER_LEFT)
+                || styledText.matches(PARTY_PLAYER_DISBANDED)
+                || styledText.matches(PARTY_PLAYER_KICKED)) {
+            WynntilsMod.info("Player is no longer in a party.");
 
             resetData(); // (!) resetData() already posts events for both HadesRelationsUpdateEvent and PartyEvent
             return true;
         }
 
-        if (styledText.matches(PARTY_JOIN_SELF)) {
-            WynntilsMod.info("Player joined a party.");
-            requestData();
+        Matcher matcher = styledText.getMatcher(PARTY_SOMEONE_JOINED);
+        if (matcher.matches()) {
+            Pair<String, String> possibleNameAndNick = StyledTextUtils.extractNameAndNick(styledText);
+            String player;
+            if (possibleNameAndNick != null) {
+                player = possibleNameAndNick.a();
+            } else {
+                player = matcher.group(1);
+            }
+
+            // If this is us, then we joined a new party and have no idea about party state.
+            if (player.equals(McUtils.playerName())) {
+                WynntilsMod.info("Player joined a new party, requesting party list.");
+                requestData();
+            } else {
+                WynntilsMod.info("Player's party has a new member: " + player);
+                partyMembers.add(player);
+                WynntilsMod.postEvent(new HadesRelationsUpdateEvent.PartyList(
+                        Set.of(player), HadesRelationsUpdateEvent.ChangeType.ADD));
+                WynntilsMod.postEvent(new PartyEvent.OtherJoined(player));
+            }
+
             return true;
         }
 
-        Matcher matcher = styledText.getMatcher(PARTY_JOIN_OTHER);
+        matcher = styledText.getMatcher(PARTY_OTHER_LEFT);
         if (matcher.matches()) {
-            String player = matcher.group(1);
-
-            WynntilsMod.info("Player's party has a new member: " + player);
-
-            partyMembers.add(player);
-            WynntilsMod.postEvent(
-                    new HadesRelationsUpdateEvent.PartyList(Set.of(player), HadesRelationsUpdateEvent.ChangeType.ADD));
-            WynntilsMod.postEvent(new PartyEvent.OtherJoined(player));
-            return true;
-        }
-
-        matcher = styledText.getMatcher(PARTY_JOIN_OTHER_SWITCH);
-        if (matcher.matches()) {
-            String player = matcher.group(1);
-
-            WynntilsMod.info("Player's party has a new member #2: " + player);
-
-            partyMembers.add(player);
-            WynntilsMod.postEvent(
-                    new HadesRelationsUpdateEvent.PartyList(Set.of(player), HadesRelationsUpdateEvent.ChangeType.ADD));
-            WynntilsMod.postEvent(new PartyEvent.OtherJoined(player));
-            return true;
-        }
-
-        matcher = styledText.getMatcher(PARTY_LEAVE_OTHER);
-        if (matcher.matches()) {
-            String player = matcher.group(1);
+            Pair<String, String> possibleNameAndNick = StyledTextUtils.extractNameAndNick(styledText);
+            String player;
+            if (possibleNameAndNick != null) {
+                player = possibleNameAndNick.a();
+            } else {
+                player = matcher.group(1);
+            }
 
             WynntilsMod.info("Other player left player's party: " + player);
 
@@ -219,57 +214,65 @@ public final class PartyModel extends Model {
             return true;
         }
 
-        matcher = styledText.getMatcher(PARTY_PROMOTE_OTHER);
+        matcher = styledText.getMatcher(PARTY_OTHER_KICKED);
         if (matcher.matches()) {
-            String player = matcher.group(1);
+            Pair<String, String> possibleNameAndNick = StyledTextUtils.extractNameAndNick(styledText);
+            String player;
+            if (possibleNameAndNick != null) {
+                player = possibleNameAndNick.a();
+            } else {
+                player = matcher.group(1);
+            }
 
-            WynntilsMod.info("Player's party has a new leader: " + player);
+            WynntilsMod.info("Other player was kicked from player's party: " + player);
 
-            partyLeader = player;
+            partyMembers.remove(player);
+            WynntilsMod.postEvent(new HadesRelationsUpdateEvent.PartyList(
+                    Set.of(player), HadesRelationsUpdateEvent.ChangeType.REMOVE));
+            WynntilsMod.postEvent(new PartyEvent.OtherLeft(player));
             return true;
         }
 
-        matcher = styledText.getMatcher(PARTY_PROMOTE_SELF);
+        matcher = styledText.getMatcher(PARTY_NEW_LEADER);
         if (matcher.matches()) {
-            WynntilsMod.info("Player has been promoted to party leader.");
+            Pair<String, String> possibleNameAndNick = StyledTextUtils.extractNameAndNick(styledText);
+            String player;
+            if (possibleNameAndNick != null) {
+                player = possibleNameAndNick.a();
+            } else {
+                player = matcher.group(1);
+            }
 
-            partyLeader = McUtils.playerName();
+            WynntilsMod.info("Player's party has a new leader: " + player);
+
+            // Prevent race conditions for methods that manually request leader immediately on event
+            String oldLeader = partyLeader;
+            partyLeader = player;
+            WynntilsMod.postEvent(new PartyEvent.Promoted(oldLeader, partyLeader));
             return true;
         }
 
         matcher = styledText.getMatcher(PARTY_INVITED);
         if (matcher.matches()) {
-            String inviter = matcher.group(1);
+            Pair<String, String> possibleNameAndNick = StyledTextUtils.extractNameAndNick(styledText);
+            String inviter;
+            if (possibleNameAndNick != null) {
+                inviter = possibleNameAndNick.a();
+            } else {
+                inviter = matcher.group(1);
+            }
             WynntilsMod.info("Player has been invited to party by " + inviter);
 
             WynntilsMod.postEvent(new PartyEvent.Invited(inviter));
             return true;
         }
 
-        matcher = styledText.getMatcher(PARTY_KICK_OTHER);
+        matcher = styledText.getMatcher(PARTY_RESTORED_SELF);
         if (matcher.matches()) {
-            WynntilsMod.info("Other player was kicked from player's party");
+            // We have no idea what the previous party was, so we have to request the party list.
+            WynntilsMod.info("Player's previous party was restored, requesting party list.");
 
-            /*
-            (!) This message/matcher is ONLY triggered when the player sends "/party kick". Since that message
-            does not tell us who we actually kicked, the #processPartyKick() method handles all the logic for this event.
-            That method should be invoked whereever we run "/party kick".
-            HOWEVER: if the player decides to run "/party kick" manually from the chat for whatever reason,
-            this event will be triggered and the #processPartyKick() method will not be invoked.
-
-            So, the nextKickHandled boolean will tell us if the kick was already handled.
-            If it was not handled, we have no choice but to re-request the party data.
-
-            But also, we have a delay here because it takes time for the server to update the leaderboard. (Which is partially
-            the reason why we don't like to use the request function too much.)
-            */
-
-            if (!nextKickHandled) {
-                Managers.TickScheduler.scheduleLater(this::requestData, 2);
-            } else {
-                nextKickHandled = false;
-            }
-
+            requestData();
             return true;
         }
 
@@ -277,7 +280,7 @@ public final class PartyModel extends Model {
     }
 
     private boolean tryParseNoPartyMessage(StyledText styledText) {
-        if (styledText.matches(PARTY_LIST_SELF_FAILED)) {
+        if (styledText.matches(PARTY_COMMAND_FAILED)) {
             resetData();
             WynntilsMod.info("Player is not in a party.");
             return true;
@@ -287,24 +290,22 @@ public final class PartyModel extends Model {
     }
 
     private boolean tryParsePartyList(StyledText styledText) {
-        Matcher matcher = StyledTextUtils.unwrap(styledText).getMatcher(PARTY_LIST_ALL);
+        Matcher matcher = styledText.getMatcher(PARTY_LIST_ALL);
         if (!matcher.matches()) return false;
 
         String[] partyList = StyledText.fromString(matcher.group(1))
                 .getStringWithoutFormatting()
-                .split("(, | and )");
+                .split("(?:,(?: and)? )");
         List<String> newPartyMembers = new ArrayList<>();
+        Collections.addAll(newPartyMembers, partyList);
 
-        boolean firstMember = true;
-
-        for (String member : partyList) {
-            if (firstMember) {
-                partyLeader = member;
-                firstMember = false;
-            }
-
-            newPartyMembers.add(member);
-        }
+        // Attempt to look for party leader with pattern.
+        // If fail, assume we are leader (no special color will appear in list)
+        Matcher leaderMatcher = styledText.getMatcher(PARTY_LIST_LEADER);
+        String oldLeader = partyLeader;
+        partyLeader = leaderMatcher.find() ? leaderMatcher.group(1) : McUtils.playerName();
+        WynntilsMod.postEvent(new PartyEvent.Promoted(oldLeader, partyLeader));
+        WynntilsMod.info("Successfully updated party leader, current leader is " + partyLeader + ".");
 
         // Sort the party members by the order they appear in the old party list, to preserve the order
         partyMembers = newPartyMembers.stream()
@@ -328,19 +329,6 @@ public final class PartyModel extends Model {
     }
 
     /**
-     * Wynncraft doesn't tell us who we kicked when we do "/party kick", and manually requesting the party list
-     * is slow and expensive. So this method exists.
-     */
-    private void processPartyKick(String playerName) {
-        partyMembers.remove(playerName);
-        offlineMembers.remove(playerName);
-
-        WynntilsMod.postEvent(new HadesRelationsUpdateEvent.PartyList(
-                Set.of(playerName), HadesRelationsUpdateEvent.ChangeType.REMOVE));
-        WynntilsMod.postEvent(new PartyEvent.OtherLeft(playerName));
-    }
-
-    /**
      * Resets all party data to a state where the player is not in a party.
      * Posts events for both PartyEvent and HadesRelationsUpdateEvent.
      */
@@ -360,6 +348,7 @@ public final class PartyModel extends Model {
      * (!) Skips if the last request was less than 250ms ago.
      * When the response is received, partyMembers and partyLeader will be updated.
      * After that, the offlineMembers list will be updated from scoreboard data.
+     * Hades relations will be updated and PartyEvent.Listed will be posted.
      */
     public void requestData() {
         if (McUtils.player() == null) return;
@@ -432,9 +421,7 @@ public final class PartyModel extends Model {
      * Kicks a player from the party.
      */
     public void partyKick(String player) {
-        nextKickHandled = true;
         Handlers.Command.queueCommand("party kick " + player);
-        processPartyKick(player);
     }
 
     /**

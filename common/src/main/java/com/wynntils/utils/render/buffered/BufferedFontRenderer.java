@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils.render.buffered;
@@ -17,6 +17,7 @@ import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.TextShadow;
 import com.wynntils.utils.render.type.VerticalAlignment;
 import com.wynntils.utils.type.IterationDecision;
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
@@ -54,7 +55,8 @@ public final class BufferedFontRenderer {
             HorizontalAlignment horizontalAlignment,
             VerticalAlignment verticalAlignment,
             TextShadow shadow,
-            float textScale) {
+            float textScale,
+            Font.DisplayMode displayMode) {
         float renderX;
         float renderY;
 
@@ -64,117 +66,204 @@ public final class BufferedFontRenderer {
 
         renderX = switch (horizontalAlignment) {
             case LEFT -> x;
-            case CENTER -> x - (font.width(text.getString()) / 2f * textScale);
-            case RIGHT -> x - font.width(text.getString()) * textScale;};
+            case CENTER -> x - (font.width(text.getComponent()) / 2f * textScale);
+            case RIGHT -> x - font.width(text.getComponent()) * textScale;
+        };
 
         renderY = switch (verticalAlignment) {
             case TOP -> y;
             case MIDDLE -> y - (font.lineHeight / 2f * textScale);
-            case BOTTOM -> y - font.lineHeight * textScale;};
+            case BOTTOM -> y - font.lineHeight * textScale;
+        };
 
         poseStack.pushPose();
         poseStack.translate(renderX, renderY, 0);
         poseStack.scale(textScale, textScale, 0);
 
         switch (shadow) {
-            case NONE -> font.drawInBatch(
-                    text.getString(),
-                    0,
-                    0,
-                    customColor.asInt(),
-                    false,
-                    poseStack.last().pose(),
-                    bufferSource,
-                    Font.DisplayMode.SEE_THROUGH,
-                    0,
-                    0xF000F0,
-                    font.isBidirectional());
-            case NORMAL -> font.drawInBatch(
-                    text.getString(),
-                    0,
-                    0,
-                    customColor.asInt(),
-                    true,
-                    poseStack.last().pose(),
-                    bufferSource,
-                    Font.DisplayMode.SEE_THROUGH,
-                    0,
-                    0xF000F0,
-                    font.isBidirectional());
-            case OUTLINE -> {
-                int shadowColor = SHADOW_COLOR.withAlpha(customColor.a).asInt();
-                String strippedText = text.iterate((part, changes) -> {
-                            changes.remove(part);
-                            changes.add(part.withStyle(partStyle -> partStyle.withColor(ChatFormatting.BLACK)));
-                            return IterationDecision.CONTINUE;
-                        })
-                        .getString();
-
+            case NONE ->
                 font.drawInBatch(
-                        strippedText,
-                        -1,
-                        0,
-                        shadowColor,
-                        false,
-                        poseStack.last().pose(),
-                        bufferSource,
-                        Font.DisplayMode.NORMAL,
-                        0,
-                        0xF000F0,
-                        font.isBidirectional());
-                font.drawInBatch(
-                        strippedText,
-                        1,
-                        0,
-                        shadowColor,
-                        false,
-                        poseStack.last().pose(),
-                        bufferSource,
-                        Font.DisplayMode.NORMAL,
-                        0,
-                        0xF000F0,
-                        font.isBidirectional());
-                font.drawInBatch(
-                        strippedText,
-                        0,
-                        -1,
-                        shadowColor,
-                        false,
-                        poseStack.last().pose(),
-                        bufferSource,
-                        Font.DisplayMode.NORMAL,
-                        0,
-                        0xF000F0,
-                        font.isBidirectional());
-                font.drawInBatch(
-                        strippedText,
-                        0,
-                        1,
-                        shadowColor,
-                        false,
-                        poseStack.last().pose(),
-                        bufferSource,
-                        Font.DisplayMode.NORMAL,
-                        0,
-                        0xF000F0,
-                        font.isBidirectional());
-
-                font.drawInBatch(
-                        text.getString(),
+                        text.getComponent(),
                         0,
                         0,
                         customColor.asInt(),
                         false,
                         poseStack.last().pose(),
                         bufferSource,
-                        Font.DisplayMode.NORMAL,
+                        displayMode,
                         0,
-                        0xF000F0,
-                        font.isBidirectional());
+                        0xF000F0);
+            case NORMAL ->
+                font.drawInBatch(
+                        text.getComponent(),
+                        0,
+                        0,
+                        customColor.asInt(),
+                        true,
+                        poseStack.last().pose(),
+                        bufferSource,
+                        displayMode,
+                        0,
+                        0xF000F0);
+            case OUTLINE -> {
+                int shadowColor = SHADOW_COLOR.withAlpha(customColor.a()).asInt();
+                Component strippedComponent = text.iterate((part, changes) -> {
+                            changes.remove(part);
+                            changes.add(part.withStyle(partStyle -> partStyle.withColor(ChatFormatting.BLACK)));
+                            return IterationDecision.CONTINUE;
+                        })
+                        .getComponent();
+
+                font.drawInBatch(
+                        strippedComponent,
+                        -1,
+                        0,
+                        shadowColor,
+                        false,
+                        poseStack.last().pose(),
+                        bufferSource,
+                        displayMode,
+                        0,
+                        0xF000F0);
+                font.drawInBatch(
+                        strippedComponent,
+                        1,
+                        0,
+                        shadowColor,
+                        false,
+                        poseStack.last().pose(),
+                        bufferSource,
+                        displayMode,
+                        0,
+                        0xF000F0);
+                font.drawInBatch(
+                        strippedComponent,
+                        0,
+                        -1,
+                        shadowColor,
+                        false,
+                        poseStack.last().pose(),
+                        bufferSource,
+                        displayMode,
+                        0,
+                        0xF000F0);
+                font.drawInBatch(
+                        strippedComponent,
+                        0,
+                        1,
+                        shadowColor,
+                        false,
+                        poseStack.last().pose(),
+                        bufferSource,
+                        displayMode,
+                        0,
+                        0xF000F0);
+
+                font.drawInBatch(
+                        text.getComponent(),
+                        0,
+                        0,
+                        customColor.asInt(),
+                        false,
+                        poseStack.last().pose(),
+                        bufferSource,
+                        displayMode,
+                        0,
+                        0xF000F0);
             }
         }
 
         poseStack.popPose();
+    }
+
+    public void renderText(
+            PoseStack poseStack,
+            MultiBufferSource bufferSource,
+            StyledText text,
+            float x,
+            float y,
+            CustomColor customColor,
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
+            TextShadow shadow,
+            float textScale) {
+        renderText(
+                poseStack,
+                bufferSource,
+                text,
+                x,
+                y,
+                customColor,
+                horizontalAlignment,
+                verticalAlignment,
+                shadow,
+                textScale,
+                Font.DisplayMode.SEE_THROUGH);
+    }
+
+    public void renderAlignedTextInBox(
+            PoseStack poseStack,
+            MultiBufferSource bufferSource,
+            StyledText[] lines,
+            float x1,
+            float x2,
+            float y1,
+            float y2,
+            float maxWidth,
+            CustomColor customColor,
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
+            TextShadow textShadow,
+            float textScale) {
+        int lineHeight = font.lineHeight;
+        List<StyledText> adjustedLines = new ArrayList<>();
+        for (StyledText line : lines) {
+            if (maxWidth == 0 || font.width(line.getComponent()) < maxWidth / textScale) {
+                adjustedLines.add(line);
+            } else {
+                List<FormattedText> parts =
+                        font.getSplitter().splitLines(line.getComponent(), (int) (maxWidth / textScale), Style.EMPTY);
+                StyledText lastPart = StyledText.EMPTY;
+                for (FormattedText part : parts) {
+                    Style lastStyle = ComponentUtils.getLastPartCodes(lastPart);
+                    StyledText text = StyledText.fromComponent(
+                                    Component.literal("").withStyle(lastStyle))
+                            .append(StyledText.fromComponent(ComponentUtils.formattedTextToComponent(part)));
+                    lastPart = text;
+                    adjustedLines.add(text);
+                }
+            }
+        }
+
+        float calculatedTextHeight = (adjustedLines.size() - 1) * lineHeight * textScale;
+
+        float renderX =
+                switch (horizontalAlignment) {
+                    case LEFT -> x1;
+                    case CENTER -> (x1 + x2) / 2f;
+                    case RIGHT -> x2;
+                };
+        float renderY =
+                switch (verticalAlignment) {
+                    case TOP -> y1;
+                    case MIDDLE -> (y1 + y2) / 2f - calculatedTextHeight / 2f;
+                    case BOTTOM -> y2 - calculatedTextHeight;
+                };
+        float lineOffset = 0;
+        for (StyledText text : adjustedLines) {
+            renderText(
+                    poseStack,
+                    bufferSource,
+                    text,
+                    renderX,
+                    renderY + lineOffset,
+                    customColor,
+                    horizontalAlignment,
+                    verticalAlignment,
+                    textShadow,
+                    textScale);
+            lineOffset += lineHeight * textScale;
+        }
     }
 
     public void renderAlignedTextInBox(
@@ -191,26 +280,14 @@ public final class BufferedFontRenderer {
             VerticalAlignment verticalAlignment,
             TextShadow textShadow,
             float textScale) {
-        float renderX =
-                switch (horizontalAlignment) {
-                    case LEFT -> x1;
-                    case CENTER -> (x1 + x2) / 2f;
-                    case RIGHT -> x2;
-                };
-
-        float renderY =
-                switch (verticalAlignment) {
-                    case TOP -> y1;
-                    case MIDDLE -> (y1 + y2) / 2f;
-                    case BOTTOM -> y2;
-                };
-
-        renderText(
+        renderAlignedTextInBox(
                 poseStack,
                 bufferSource,
-                text,
-                renderX,
-                renderY,
+                new StyledText[] {text},
+                x1,
+                x2,
+                y1,
+                y2,
                 maxWidth,
                 customColor,
                 horizontalAlignment,
@@ -330,7 +407,7 @@ public final class BufferedFontRenderer {
             float textScale) {
         if (text == null) return;
 
-        if (maxWidth == 0 || font.width(text.getString()) < maxWidth / textScale) {
+        if (maxWidth == 0 || font.width(text.getComponent()) < maxWidth / textScale) {
             renderText(
                     poseStack,
                     bufferSource,

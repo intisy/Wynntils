@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.maps;
@@ -15,9 +15,11 @@ import com.wynntils.features.map.MainMapFeature;
 import com.wynntils.models.marker.type.DynamicLocationSupplier;
 import com.wynntils.models.marker.type.MarkerInfo;
 import com.wynntils.screens.base.widgets.BasicTexturedButton;
+import com.wynntils.services.hades.type.PlayerRelation;
 import com.wynntils.services.lootrunpaths.LootrunPathInstance;
 import com.wynntils.services.map.pois.CustomPoi;
 import com.wynntils.services.map.pois.IconPoi;
+import com.wynntils.services.map.pois.PlayerMainMapPoi;
 import com.wynntils.services.map.pois.Poi;
 import com.wynntils.services.map.pois.TerritoryPoi;
 import com.wynntils.services.map.pois.WaypointPoi;
@@ -25,7 +27,6 @@ import com.wynntils.utils.colors.CommonColors;
 import com.wynntils.utils.mc.KeyboardUtils;
 import com.wynntils.utils.mc.McUtils;
 import com.wynntils.utils.mc.type.Location;
-import com.wynntils.utils.mc.type.PoiLocation;
 import com.wynntils.utils.render.MapRenderer;
 import com.wynntils.utils.render.RenderUtils;
 import com.wynntils.utils.render.Texture;
@@ -123,7 +124,7 @@ public final class MainMapScreen extends AbstractMapScreen {
                 12,
                 16,
                 Texture.WAYPOINT_MANAGER_ICON,
-                (b) -> McUtils.mc().setScreen(PoiManagementScreen.create(this)),
+                (b) -> McUtils.setScreen(PoiManagementScreen.create(this)),
                 List.of(
                         Component.literal("[>] ")
                                 .withStyle(ChatFormatting.RED)
@@ -205,7 +206,7 @@ public final class MainMapScreen extends AbstractMapScreen {
                 14,
                 14,
                 Texture.ADD_ICON,
-                (b) -> McUtils.mc().setScreen(PoiCreationScreen.create(this)),
+                (b) -> McUtils.setScreen(PoiCreationScreen.create(this)),
                 List.of(
                         Component.literal("[>] ")
                                 .withStyle(ChatFormatting.DARK_GREEN)
@@ -246,11 +247,14 @@ public final class MainMapScreen extends AbstractMapScreen {
 
         RenderSystem.enableDepthTest();
 
-        renderMap(poseStack);
+        renderMap(guiGraphics);
 
         RenderUtils.enableScissor(
-                (int) (renderX + renderedBorderXOffset), (int) (renderY + renderedBorderYOffset), (int) mapWidth, (int)
-                        mapHeight);
+                guiGraphics,
+                (int) (renderX + renderedBorderXOffset),
+                (int) (renderY + renderedBorderYOffset),
+                (int) mapWidth,
+                (int) mapHeight);
 
         renderPois(poseStack, mouseX, mouseY);
 
@@ -289,7 +293,7 @@ public final class MainMapScreen extends AbstractMapScreen {
                     CommonColors.BLACK.asInt());
         }
 
-        RenderUtils.disableScissor();
+        RenderUtils.disableScissor(guiGraphics);
 
         renderBackground(guiGraphics, mouseX, mouseY, partialTick);
 
@@ -312,12 +316,15 @@ public final class MainMapScreen extends AbstractMapScreen {
         pois = Stream.concat(pois, Models.Marker.getAllPois());
         pois = Stream.concat(
                 pois,
-                Services.Hades.getPlayerPois(
+                getPlayerPois(
                         Managers.Feature.getFeatureInstance(MainMapFeature.class)
                                 .renderRemotePartyPlayers
                                 .get(),
                         Managers.Feature.getFeatureInstance(MainMapFeature.class)
                                 .renderRemoteFriendPlayers
+                                .get(),
+                        Managers.Feature.getFeatureInstance(MainMapFeature.class)
+                                .renderRemoteGuildPlayers
                                 .get()));
 
         if (showTerrs) {
@@ -333,6 +340,15 @@ public final class MainMapScreen extends AbstractMapScreen {
                         .get(),
                 mouseX,
                 mouseY);
+    }
+
+    private Stream<PlayerMainMapPoi> getPlayerPois(
+            boolean renderRemotePartyPlayers, boolean renderRemoteFriendPlayers, boolean renderRemoteGuildPlayers) {
+        return Services.Hades.getHadesUsers()
+                .filter(hadesUser -> (hadesUser.getRelation() == PlayerRelation.PARTY && renderRemotePartyPlayers)
+                        || (hadesUser.getRelation() == PlayerRelation.FRIEND && renderRemoteFriendPlayers)
+                        || (hadesUser.getRelation() == PlayerRelation.GUILD && renderRemoteGuildPlayers))
+                .map(PlayerMainMapPoi::new);
     }
 
     @Override
@@ -430,12 +446,12 @@ public final class MainMapScreen extends AbstractMapScreen {
         } else if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
             if (KeyboardUtils.isShiftDown()) {
                 if (hovered instanceof CustomPoi customPoi && !Services.Poi.isPoiProvided(customPoi)) {
-                    McUtils.mc().setScreen(PoiCreationScreen.create(this, customPoi));
+                    McUtils.setScreen(PoiCreationScreen.create(this, customPoi));
                 } else {
                     int gameX = (int) ((mouseX - centerX) / zoomRenderScale + mapCenterX);
                     int gameZ = (int) ((mouseY - centerZ) / zoomRenderScale + mapCenterZ);
 
-                    McUtils.mc().setScreen(PoiCreationScreen.create(this, new PoiLocation(gameX, null, gameZ)));
+                    McUtils.setScreen(PoiCreationScreen.create(this, new Location(gameX, 0, gameZ)));
                 }
             } else if (KeyboardUtils.isAltDown()) {
                 if (hovered instanceof CustomPoi customPoi && !Services.Poi.isPoiProvided(customPoi)) {

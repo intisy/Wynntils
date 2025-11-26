@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.functions;
@@ -7,8 +7,10 @@ package com.wynntils.functions;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.components.Services;
 import com.wynntils.core.consumers.functions.Function;
+import com.wynntils.core.consumers.functions.arguments.Argument;
 import com.wynntils.core.consumers.functions.arguments.FunctionArguments;
-import com.wynntils.models.mobtotem.MobTotem;
+import com.wynntils.models.bonustotems.BonusTotem;
+import com.wynntils.models.bonustotems.type.BonusTotemType;
 import com.wynntils.models.territories.profile.TerritoryProfile;
 import com.wynntils.models.token.type.TokenGatekeeper;
 import com.wynntils.models.worlds.profile.ServerProfile;
@@ -69,7 +71,7 @@ public class WorldFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("worldName", String.class, "")));
+                    List.of(new Argument<>("worldName", String.class, "")));
         }
 
         @Override
@@ -112,6 +114,98 @@ public class WorldFunctions {
         }
     }
 
+    public static class GatheringTotemCountFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            return Models.BonusTotem.getBonusTotemsByType(BonusTotemType.GATHERING)
+                    .size();
+        }
+    }
+
+    public static class GatheringTotemOwnerFunction extends Function<String> {
+        @Override
+        public String getValue(FunctionArguments arguments) {
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.GATHERING,
+                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+
+            if (bonusTotem == null) {
+                return "";
+            }
+
+            return bonusTotem.getOwner();
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
+        }
+    }
+
+    public static class GatheringTotemDistanceFunction extends Function<Double> {
+        @Override
+        public Double getValue(FunctionArguments arguments) {
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.GATHERING,
+                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+
+            if (bonusTotem == null) {
+                return 0.0d;
+            }
+
+            return bonusTotem.getDistanceToPlayer();
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
+        }
+    }
+
+    public static class GatheringTotemFunction extends Function<Location> {
+        @Override
+        public Location getValue(FunctionArguments arguments) {
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.GATHERING,
+                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+
+            if (bonusTotem == null) {
+                return new Location(0, 0, 0);
+            }
+
+            return Location.containing(bonusTotem.getPosition());
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
+        }
+    }
+
+    public static class GatheringTotemTimeLeftFunction extends Function<String> {
+        @Override
+        public String getValue(FunctionArguments arguments) {
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.GATHERING,
+                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+
+            if (bonusTotem == null) {
+                return "";
+            }
+
+            return bonusTotem.getTimerString();
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
+        }
+    }
+
     public static class TokenGatekeeperCountFunction extends Function<Integer> {
         @Override
         public Integer getValue(FunctionArguments arguments) {
@@ -137,7 +231,7 @@ public class WorldFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("gatekeeperNumber", Integer.class, 0)));
+                    List.of(new Argument<>("gatekeeperNumber", Integer.class, 0)));
         }
 
         @Override
@@ -159,7 +253,7 @@ public class WorldFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("gatekeeperNumber", Integer.class, 0)));
+                    List.of(new Argument<>("gatekeeperNumber", Integer.class, 0)));
         }
 
         @Override
@@ -181,7 +275,7 @@ public class WorldFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("gatekeeperNumber", Integer.class, 0)));
+                    List.of(new Argument<>("gatekeeperNumber", Integer.class, 0)));
         }
 
         @Override
@@ -193,87 +287,87 @@ public class WorldFunctions {
     public static class MobTotemCountFunction extends Function<Integer> {
         @Override
         public Integer getValue(FunctionArguments arguments) {
-            return Models.MobTotem.getMobTotems().size();
+            return Models.BonusTotem.getBonusTotemsByType(BonusTotemType.MOB).size();
         }
     }
 
     public static class MobTotemOwnerFunction extends Function<String> {
         @Override
         public String getValue(FunctionArguments arguments) {
-            MobTotem mobTotem = Models.MobTotem.getMobTotem(
-                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.MOB, arguments.getArgument("totemNumber").getIntegerValue() - 1);
 
-            if (mobTotem == null) {
+            if (bonusTotem == null) {
                 return "";
             }
 
-            return mobTotem.getOwner();
+            return bonusTotem.getOwner();
         }
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("totemNumber", Integer.class, null)));
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
         }
     }
 
     public static class MobTotemDistanceFunction extends Function<Double> {
         @Override
         public Double getValue(FunctionArguments arguments) {
-            MobTotem mobTotem = Models.MobTotem.getMobTotem(
-                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.MOB, arguments.getArgument("totemNumber").getIntegerValue() - 1);
 
-            if (mobTotem == null) {
+            if (bonusTotem == null) {
                 return 0.0d;
             }
 
-            return mobTotem.getDistanceToPlayer();
+            return bonusTotem.getDistanceToPlayer();
         }
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("totemNumber", Integer.class, null)));
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
         }
     }
 
     public static class MobTotemFunction extends Function<Location> {
         @Override
         public Location getValue(FunctionArguments arguments) {
-            MobTotem mobTotem = Models.MobTotem.getMobTotem(
-                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.MOB, arguments.getArgument("totemNumber").getIntegerValue() - 1);
 
-            if (mobTotem == null) {
+            if (bonusTotem == null) {
                 return new Location(0, 0, 0);
             }
 
-            return Location.containing(mobTotem.getPosition());
+            return Location.containing(bonusTotem.getPosition());
         }
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("totemNumber", Integer.class, null)));
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
         }
     }
 
     public static class MobTotemTimeLeftFunction extends Function<String> {
         @Override
         public String getValue(FunctionArguments arguments) {
-            MobTotem mobTotem = Models.MobTotem.getMobTotem(
-                    arguments.getArgument("totemNumber").getIntegerValue() - 1);
+            BonusTotem bonusTotem = Models.BonusTotem.getBonusTotem(
+                    BonusTotemType.MOB, arguments.getArgument("totemNumber").getIntegerValue() - 1);
 
-            if (mobTotem == null) {
+            if (bonusTotem == null) {
                 return "";
             }
 
-            return mobTotem.getTimerString();
+            return bonusTotem.getTimerString();
         }
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("totemNumber", Integer.class, null)));
+                    List.of(new Argument<>("totemNumber", Integer.class, null)));
         }
     }
 
@@ -326,7 +420,7 @@ public class WorldFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("prefixOnly", Boolean.class, false)));
+                    List.of(new Argument<>("prefixOnly", Boolean.class, false)));
         }
     }
 
@@ -343,9 +437,9 @@ public class WorldFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(List.of(
-                    new FunctionArguments.Argument<>("width", Number.class, 130),
-                    new FunctionArguments.Argument<>("height", Number.class, 130),
-                    new FunctionArguments.Argument<>("scale", Number.class, 1)));
+                    new Argument<>("width", Number.class, 130),
+                    new Argument<>("height", Number.class, 130),
+                    new Argument<>("scale", Number.class, 1)));
         }
     }
 }

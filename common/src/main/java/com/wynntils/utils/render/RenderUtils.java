@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils.render;
@@ -14,6 +14,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.utils.MathUtils;
 import com.wynntils.utils.colors.CommonColors;
 import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.mc.McUtils;
@@ -23,7 +24,7 @@ import com.wynntils.utils.render.type.VerticalAlignment;
 import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.CoreShaders;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.network.chat.Component;
@@ -52,7 +53,7 @@ public final class RenderUtils {
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        RenderSystem.setShader(CoreShaders.POSITION_COLOR);
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
 
@@ -64,10 +65,10 @@ public final class RenderUtils {
                 y1 = y2;
                 y2 = tmp;
             }
-            bufferBuilder.addVertex(matrix, x1 - halfWidth, y1, z).setColor(color.r, color.g, color.b, color.a);
-            bufferBuilder.addVertex(matrix, x2 - halfWidth, y2, z).setColor(color.r, color.g, color.b, color.a);
-            bufferBuilder.addVertex(matrix, x1 + halfWidth, y1, z).setColor(color.r, color.g, color.b, color.a);
-            bufferBuilder.addVertex(matrix, x2 + halfWidth, y2, z).setColor(color.r, color.g, color.b, color.a);
+            bufferBuilder.addVertex(matrix, x1 - halfWidth, y1, z).setColor(color.r(), color.g(), color.b(), color.a());
+            bufferBuilder.addVertex(matrix, x2 - halfWidth, y2, z).setColor(color.r(), color.g(), color.b(), color.a());
+            bufferBuilder.addVertex(matrix, x1 + halfWidth, y1, z).setColor(color.r(), color.g(), color.b(), color.a());
+            bufferBuilder.addVertex(matrix, x2 + halfWidth, y2, z).setColor(color.r(), color.g(), color.b(), color.a());
         } else if (y1 == y2) {
             if (x2 < x1) {
                 float tmp = x1;
@@ -75,10 +76,10 @@ public final class RenderUtils {
                 x2 = tmp;
             }
 
-            bufferBuilder.addVertex(matrix, x1, y1 - halfWidth, z).setColor(color.r, color.g, color.b, color.a);
-            bufferBuilder.addVertex(matrix, x1, y1 + halfWidth, z).setColor(color.r, color.g, color.b, color.a);
-            bufferBuilder.addVertex(matrix, x2, y2 - halfWidth, z).setColor(color.r, color.g, color.b, color.a);
-            bufferBuilder.addVertex(matrix, x2, y2 + halfWidth, z).setColor(color.r, color.g, color.b, color.a);
+            bufferBuilder.addVertex(matrix, x1, y1 - halfWidth, z).setColor(color.r(), color.g(), color.b(), color.a());
+            bufferBuilder.addVertex(matrix, x1, y1 + halfWidth, z).setColor(color.r(), color.g(), color.b(), color.a());
+            bufferBuilder.addVertex(matrix, x2, y2 - halfWidth, z).setColor(color.r(), color.g(), color.b(), color.a());
+            bufferBuilder.addVertex(matrix, x2, y2 + halfWidth, z).setColor(color.r(), color.g(), color.b(), color.a());
         } else if ((x1 < x2 && y1 < y2) || (x2 < x1 && y2 < y1)) { // Top Left to Bottom Right line
             if (x2 < x1) {
                 float tmp = x1;
@@ -92,16 +93,16 @@ public final class RenderUtils {
 
             bufferBuilder
                     .addVertex(matrix, x1 + halfWidth, y1 - halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             bufferBuilder
                     .addVertex(matrix, x1 - halfWidth, y1 + halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             bufferBuilder
                     .addVertex(matrix, x2 + halfWidth, y2 - halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             bufferBuilder
                     .addVertex(matrix, x2 - halfWidth, y2 + halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
         } else { // Top Right to Bottom Left Line
             if (x1 < x2) {
                 float tmp = x1;
@@ -115,16 +116,16 @@ public final class RenderUtils {
 
             bufferBuilder
                     .addVertex(matrix, x1 + halfWidth, y1 + halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             bufferBuilder
                     .addVertex(matrix, x1 - halfWidth, y1 - halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             bufferBuilder
                     .addVertex(matrix, x2 + halfWidth, y2 + halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             bufferBuilder
                     .addVertex(matrix, x2 - halfWidth, y2 - halfWidth, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
         }
 
         BufferUploader.drawWithShader(bufferBuilder.build());
@@ -139,19 +140,107 @@ public final class RenderUtils {
         drawLine(poseStack, color, x1, y2, x1, y1, z, lineWidth);
     }
 
+    public static void drawRotatingBorderSegment(
+            PoseStack poseStack,
+            CustomColor color,
+            float x1,
+            float y1,
+            float x2,
+            float y2,
+            float z,
+            float lineWidth,
+            float segmentFraction) {
+        segmentFraction = MathUtils.clamp(segmentFraction, 0.0f, 1.0f);
+
+        if (x2 < x1) {
+            float tmp = x1;
+            x1 = x2;
+            x2 = tmp;
+        }
+        if (y2 < y1) {
+            float tmp = y1;
+            y1 = y2;
+            y2 = tmp;
+        }
+
+        float width = x2 - x1;
+        float height = y2 - y1;
+        float perimeter = 2 * (width + height);
+
+        float progress = (McUtils.player().tickCount % 100) / 100f;
+        float segmentLength = segmentFraction * perimeter;
+        float offset = (progress % 1.0f) * perimeter;
+
+        float[][] points = {
+            {x1, y1, x2, y1},
+            {x2, y1, x2, y2},
+            {x2, y2, x1, y2},
+            {x1, y2, x1, y1}
+        };
+
+        float remainingLength = segmentLength;
+        float accumulatedLength = 0f;
+
+        for (int i = 0; i < points.length; i++) {
+            float[] edge = points[i];
+            float edgeX1 = edge[0];
+            float edgeY1 = edge[1];
+            float edgeX2 = edge[2];
+            float edgeY2 = edge[3];
+            float edgeLength = (float) Math.hypot(edgeX2 - edgeX1, edgeY2 - edgeY1);
+
+            if (offset < accumulatedLength + edgeLength) {
+                float localOffset = offset - accumulatedLength;
+                float segmentEdgeStart = localOffset / edgeLength;
+                float startX = edgeX1 + (edgeX2 - edgeX1) * segmentEdgeStart;
+                float startY = edgeY1 + (edgeY2 - edgeY1) * segmentEdgeStart;
+
+                while (remainingLength > 0) {
+                    float segmentEdgeEnd = Math.min(1f, segmentEdgeStart + (remainingLength / edgeLength));
+                    float endX = edgeX1 + (edgeX2 - edgeX1) * segmentEdgeEnd;
+                    float endY = edgeY1 + (edgeY2 - edgeY1) * segmentEdgeEnd;
+
+                    drawLine(poseStack, color, startX, startY, endX, endY, z, lineWidth);
+
+                    remainingLength -= (segmentEdgeEnd - segmentEdgeStart) * edgeLength;
+
+                    if (segmentEdgeEnd >= 1f) {
+                        i = (i + 1) % points.length;
+                        edge = points[i];
+                        edgeX1 = edge[0];
+                        edgeY1 = edge[1];
+                        edgeX2 = edge[2];
+                        edgeY2 = edge[3];
+
+                        edgeLength = (float) Math.hypot(edgeX2 - edgeX1, edgeY2 - edgeY1);
+                        segmentEdgeStart = 0f;
+
+                        startX = edgeX1;
+                        startY = edgeY1;
+                    } else {
+                        break;
+                    }
+                }
+                break;
+            }
+
+            accumulatedLength += edgeLength;
+        }
+    }
+
     public static void drawRect(
             PoseStack poseStack, CustomColor color, float x, float y, float z, float width, float height) {
         Matrix4f matrix = poseStack.last().pose();
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        RenderSystem.setShader(CoreShaders.POSITION_COLOR);
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-        bufferBuilder.addVertex(matrix, x, y + height, z).setColor(color.r, color.g, color.b, color.a);
-        bufferBuilder.addVertex(matrix, x + width, y + height, z).setColor(color.r, color.g, color.b, color.a);
-        bufferBuilder.addVertex(matrix, x + width, y, z).setColor(color.r, color.g, color.b, color.a);
-        bufferBuilder.addVertex(matrix, x, y, z).setColor(color.r, color.g, color.b, color.a);
+        bufferBuilder.addVertex(matrix, x, y + height, z).setColor(color.r(), color.g(), color.b(), color.a());
+        bufferBuilder.addVertex(matrix, x + width, y + height, z).setColor(color.r(), color.g(), color.b(), color.a());
+        bufferBuilder.addVertex(matrix, x + width, y, z).setColor(color.r(), color.g(), color.b(), color.a());
+        bufferBuilder.addVertex(matrix, x, y, z).setColor(color.r(), color.g(), color.b(), color.a());
 
         BufferUploader.drawWithShader(bufferBuilder.build());
         RenderSystem.disableBlend();
@@ -233,7 +322,7 @@ public final class RenderUtils {
 
         Matrix4f matrix = poseStack.last().pose();
 
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        RenderSystem.setShader(CoreShaders.POSITION_TEX);
         RenderSystem.setShaderTexture(0, tex);
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
@@ -308,26 +397,26 @@ public final class RenderUtils {
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
+        RenderSystem.setShader(CoreShaders.POSITION_TEX_COLOR);
         RenderSystem.setShaderTexture(0, tex);
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
         bufferBuilder
                 .addVertex(matrix, x, y + height, z)
                 .setUv(uOffset * uScale, (vOffset + v) * vScale)
-                .setColor(color.r, color.g, color.b, color.a);
+                .setColor(color.r(), color.g(), color.b(), color.a());
         bufferBuilder
                 .addVertex(matrix, x + width, y + height, z)
                 .setUv((uOffset + u) * uScale, (vOffset + v) * vScale)
-                .setColor(color.r, color.g, color.b, color.a);
+                .setColor(color.r(), color.g(), color.b(), color.a());
         bufferBuilder
                 .addVertex(matrix, x + width, y, z)
                 .setUv((uOffset + u) * uScale, vOffset * vScale)
-                .setColor(color.r, color.g, color.b, color.a);
+                .setColor(color.r(), color.g(), color.b(), color.a());
         bufferBuilder
                 .addVertex(matrix, x, y, z)
                 .setUv(uOffset * uScale, vOffset * vScale)
-                .setColor(color.r, color.g, color.b, color.a);
+                .setColor(color.r(), color.g(), color.b(), color.a());
         BufferUploader.drawWithShader(bufferBuilder.build());
         RenderSystem.disableBlend();
     }
@@ -362,7 +451,7 @@ public final class RenderUtils {
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        RenderSystem.setShader(CoreShaders.POSITION_COLOR);
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
 
@@ -376,10 +465,10 @@ public final class RenderUtils {
 
             bufferBuilder
                     .addVertex(matrix, midX + sinAngle * outerRadius, midY - cosAngle * outerRadius, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             bufferBuilder
                     .addVertex(matrix, midX + sinAngle * innerRadius, midY - cosAngle * innerRadius, z)
-                    .setColor(color.r, color.g, color.b, color.a);
+                    .setColor(color.r(), color.g(), color.b(), color.a());
         }
 
         BufferUploader.drawWithShader(bufferBuilder.build());
@@ -538,7 +627,7 @@ public final class RenderUtils {
                 progress);
     }
 
-    public static void drawProgressBarForeground(
+    private static void drawProgressBarForeground(
             PoseStack poseStack,
             Texture texture,
             float x1,
@@ -556,7 +645,7 @@ public final class RenderUtils {
 
         Matrix4f matrix = poseStack.last().pose();
 
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        RenderSystem.setShader(CoreShaders.POSITION_TEX);
         RenderSystem.setShaderTexture(0, texture.resource());
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
@@ -607,7 +696,7 @@ public final class RenderUtils {
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
+        RenderSystem.setShader(CoreShaders.POSITION_TEX_COLOR);
         RenderSystem.setShaderTexture(0, texture.resource());
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
@@ -637,7 +726,7 @@ public final class RenderUtils {
         BufferUploader.drawWithShader(bufferBuilder.build());
     }
 
-    public static void drawProgressBarBackground(
+    private static void drawProgressBarBackground(
             PoseStack poseStack,
             Texture texture,
             float x1,
@@ -650,7 +739,7 @@ public final class RenderUtils {
             int textureY2) {
         Matrix4f matrix = poseStack.last().pose();
 
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        RenderSystem.setShader(CoreShaders.POSITION_TEX);
         RenderSystem.setShaderTexture(0, texture.resource());
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
@@ -671,8 +760,7 @@ public final class RenderUtils {
     }
 
     public static void fillGradient(
-            Matrix4f matrix,
-            BufferBuilder builder,
+            PoseStack poseStack,
             float x1,
             float y1,
             float x2,
@@ -680,26 +768,65 @@ public final class RenderUtils {
             int blitOffset,
             CustomColor colorA,
             CustomColor colorB) {
-        builder.addVertex(matrix, x2, y1, blitOffset).setColor(colorA.r, colorA.g, colorA.b, colorA.a);
-        builder.addVertex(matrix, x1, y1, blitOffset).setColor(colorA.r, colorA.g, colorA.b, colorA.a);
-        builder.addVertex(matrix, x1, y2, blitOffset).setColor(colorB.r, colorB.g, colorB.b, colorB.a);
-        builder.addVertex(matrix, x2, y2, blitOffset).setColor(colorB.r, colorB.g, colorB.b, colorB.a);
+        Matrix4f matrix = poseStack.last().pose();
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.setShader(CoreShaders.POSITION_COLOR);
+
+        BufferBuilder bufferBuilder =
+                Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+
+        bufferBuilder.addVertex(matrix, x2, y1, blitOffset).setColor(colorA.r(), colorA.g(), colorA.b(), colorA.a());
+        bufferBuilder.addVertex(matrix, x1, y1, blitOffset).setColor(colorA.r(), colorA.g(), colorA.b(), colorA.a());
+        bufferBuilder.addVertex(matrix, x1, y2, blitOffset).setColor(colorB.r(), colorB.g(), colorB.b(), colorB.a());
+        bufferBuilder.addVertex(matrix, x2, y2, blitOffset).setColor(colorB.r(), colorB.g(), colorB.b(), colorB.a());
+
+        BufferUploader.drawWithShader(bufferBuilder.build());
+
+        RenderSystem.disableDepthTest();
+        RenderSystem.disableBlend();
     }
 
-    /*
-       Normal GL implementation is in screen coordinates and thus y is inverted,
-       this changes it so it doesn't do that
-    */
-    public static void enableScissor(int x, int y, int width, int height) {
-        Window window = McUtils.window();
-        double scale = window.getGuiScale();
-        RenderSystem.enableScissor(
-                (int) (x * scale), (int) (window.getHeight() - ((y + height) * scale)), (int) (width * scale), (int)
-                        (height * scale));
+    public static void fillSidewaysGradient(
+            PoseStack poseStack,
+            float x1,
+            float y1,
+            float x2,
+            float y2,
+            int blitOffset,
+            CustomColor colorA,
+            CustomColor colorB) {
+        Matrix4f matrix = poseStack.last().pose();
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.setShader(CoreShaders.POSITION_COLOR);
+
+        BufferBuilder bufferBuilder =
+                Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+
+        bufferBuilder.addVertex(matrix, x1, y1, blitOffset).setColor(colorA.r(), colorA.g(), colorA.b(), colorA.a());
+        bufferBuilder.addVertex(matrix, x1, y2, blitOffset).setColor(colorA.r(), colorA.g(), colorA.b(), colorA.a());
+        bufferBuilder.addVertex(matrix, x2, y2, blitOffset).setColor(colorB.r(), colorB.g(), colorB.b(), colorB.a());
+        bufferBuilder.addVertex(matrix, x2, y1, blitOffset).setColor(colorB.r(), colorB.g(), colorB.b(), colorB.a());
+
+        BufferUploader.drawWithShader(bufferBuilder.build());
+
+        RenderSystem.disableDepthTest();
+        RenderSystem.disableBlend();
     }
 
-    public static void disableScissor() {
-        RenderSystem.disableScissor();
+    public static void enableScissor(GuiGraphics guiGraphics, int x, int y, int width, int height) {
+        guiGraphics.enableScissor(x, y, x + width, y + height);
+    }
+
+    public static void disableScissor(GuiGraphics guiGraphics) {
+        if (guiGraphics.scissorStack.stack.isEmpty()) return;
+
+        guiGraphics.disableScissor();
     }
 
     public static void rotatePose(PoseStack poseStack, float centerX, float centerZ, float angle) {
@@ -765,7 +892,7 @@ public final class RenderUtils {
             matrixStack.pushPose();
             matrixStack.translate(0.0F, yOffset, 0.0F);
             matrixStack.mulPose(dispatcher.cameraOrientation());
-            matrixStack.scale(0.025F * nametagScale, -0.025F * nametagScale, -0.025F * nametagScale);
+            matrixStack.scale(0.025F * nametagScale, -0.025F * nametagScale, 0.025F * nametagScale);
             Matrix4f matrix4f = matrixStack.last().pose();
 
             font.drawInBatch(
@@ -810,7 +937,7 @@ public final class RenderUtils {
 
             poseStack.translate(0, entity.getBbHeight() + 0.25F + customOffset, 0);
             poseStack.mulPose(dispatcher.cameraOrientation());
-            poseStack.scale(0.025F, -0.025F, -0.025F);
+            poseStack.scale(0.025F, -0.025F, 0.025F);
 
             Matrix4f matrix = poseStack.last().pose();
 
@@ -820,7 +947,7 @@ public final class RenderUtils {
             float vScale = 1F / textureHeight;
 
             RenderSystem.enableDepthTest();
-            RenderSystem.setShader(GameRenderer::getPositionTexShader);
+            RenderSystem.setShader(CoreShaders.POSITION_TEX);
             RenderSystem.setShaderTexture(0, tex);
 
             BufferBuilder bufferBuilder =
@@ -858,7 +985,7 @@ public final class RenderUtils {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.enableDepthTest();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        RenderSystem.setShader(CoreShaders.POSITION_COLOR);
 
         BufferBuilder bufferBuilder =
                 Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
@@ -872,13 +999,15 @@ public final class RenderUtils {
             float rightX = Mth.clamp(x + splitX * (i + 1), x, x + width);
 
             // bottom left
-            bufferBuilder.addVertex(matrix, leftX, y + height, z).setColor(color.r, color.g, color.b, color.a);
+            bufferBuilder.addVertex(matrix, leftX, y + height, z).setColor(color.r(), color.g(), color.b(), color.a());
             // bottom right
-            bufferBuilder.addVertex(matrix, centerX, y + height, z).setColor(color.r, color.g, color.b, color.a);
+            bufferBuilder
+                    .addVertex(matrix, centerX, y + height, z)
+                    .setColor(color.r(), color.g(), color.b(), color.a());
             // top right
-            bufferBuilder.addVertex(matrix, rightX, y, z).setColor(color.r, color.g, color.b, color.a);
+            bufferBuilder.addVertex(matrix, rightX, y, z).setColor(color.r(), color.g(), color.b(), color.a());
             // top left
-            bufferBuilder.addVertex(matrix, centerX, y, z).setColor(color.r, color.g, color.b, color.a);
+            bufferBuilder.addVertex(matrix, centerX, y, z).setColor(color.r(), color.g(), color.b(), color.a());
         }
 
         BufferUploader.drawWithShader(bufferBuilder.build());
@@ -921,7 +1050,7 @@ public final class RenderUtils {
 
         // Enable writing to stencil
         RenderSystem.stencilMask(0xff);
-        RenderSystem.clear(GL11.GL_STENCIL_BUFFER_BIT, true);
+        RenderSystem.clear(GL11.GL_STENCIL_BUFFER_BIT);
         RenderSystem.stencilFunc(GL11.GL_ALWAYS, 1, 0xFF);
         RenderSystem.stencilOp(GL11.GL_KEEP, GL11.GL_KEEP, GL11.GL_REPLACE);
 
@@ -962,7 +1091,7 @@ public final class RenderUtils {
 
         // Enable writing to stencil
         RenderSystem.stencilMask(0xff);
-        RenderSystem.clear(GL11.GL_STENCIL_BUFFER_BIT, true);
+        RenderSystem.clear(GL11.GL_STENCIL_BUFFER_BIT);
         RenderSystem.stencilFunc(GL11.GL_ALWAYS, 1, 0xFF);
         RenderSystem.stencilOp(GL11.GL_KEEP, GL11.GL_KEEP, GL11.GL_REPLACE);
 
@@ -987,7 +1116,7 @@ public final class RenderUtils {
      * Based on Figura <a href="https://github.com/Kingdom-of-The-Moon/FiguraRewriteRewrite"> code</a>.
      */
     public static void clearMask() {
-        RenderSystem.clear(GL11.GL_STENCIL_BUFFER_BIT, true);
+        RenderSystem.clear(GL11.GL_STENCIL_BUFFER_BIT);
 
         // Turn off writing to stencil buffer.
         RenderSystem.stencilOp(GL11.GL_KEEP, GL11.GL_KEEP, GL11.GL_KEEP);

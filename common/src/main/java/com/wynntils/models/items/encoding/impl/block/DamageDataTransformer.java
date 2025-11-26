@@ -1,10 +1,9 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.items.encoding.impl.block;
 
-import com.wynntils.models.elements.type.Element;
 import com.wynntils.models.gear.type.GearAttackSpeed;
 import com.wynntils.models.items.encoding.data.DamageData;
 import com.wynntils.models.items.encoding.type.DataTransformer;
@@ -25,14 +24,14 @@ public class DamageDataTransformer extends DataTransformer<DamageData> {
     @Override
     protected ErrorOr<UnsignedByte[]> encodeData(ItemTransformingVersion version, DamageData data) {
         return switch (version) {
-            case VERSION_1 -> encodeDamageData(data);
+            case VERSION_1, VERSION_2 -> encodeDamageData(data);
         };
     }
 
     @Override
     public ErrorOr<DamageData> decodeData(ItemTransformingVersion version, ArrayReader<UnsignedByte> byteReader) {
         return switch (version) {
-            case VERSION_1 -> decodeDamageData(byteReader);
+            case VERSION_1, VERSION_2 -> decodeDamageData(byteReader);
         };
     }
 
@@ -54,21 +53,21 @@ public class DamageDataTransformer extends DataTransformer<DamageData> {
         }
 
         // The first byte is the id of the attack speed of the item.
-        bytes.add(UnsignedByte.of((byte) data.attackSpeed().get().ordinal()));
+        bytes.add(UnsignedByte.of((byte) data.attackSpeed().get().getEncodingId()));
 
         // The next byte is the number of attack damages present on the item.
         bytes.add(UnsignedByte.of((byte) data.damages().size()));
 
         // An attack damage is encoded the following way:
         for (Pair<DamageType, RangedValue> damage : data.damages()) {
-            // The first byte is the id of the skill (`ETFWAN`, where N represents Neutral).
+            // The first byte is the id of the skill (`ETWFAN`, where N represents Neutral).
             DamageType damageType = damage.a();
-            // Neutral is 5
-            byte damageTypeId = 5;
+
+            byte damageTypeId;
             if (damageType != DamageType.NEUTRAL && damageType.getElement().isEmpty()) {
                 return ErrorOr.error("Damage type " + damageType + " does not have an element");
-            } else if (damageType != DamageType.NEUTRAL) {
-                damageTypeId = (byte) damageType.getElement().get().ordinal();
+            } else {
+                damageTypeId = (byte) damageType.getEncodingId();
             }
             bytes.add(UnsignedByte.of(damageTypeId));
 
@@ -89,7 +88,11 @@ public class DamageDataTransformer extends DataTransformer<DamageData> {
     private ErrorOr<DamageData> decodeDamageData(ArrayReader<UnsignedByte> byteReader) {
         // The first byte is the id of the attack speed of the item.
         int attackSpeedId = byteReader.read().value();
-        GearAttackSpeed attackSpeed = GearAttackSpeed.values()[attackSpeedId];
+        GearAttackSpeed attackSpeed = GearAttackSpeed.fromEncodingId(attackSpeedId);
+
+        if (attackSpeed == null) { // Sometimes null when users mess with custom encoding
+            return ErrorOr.error("Invalid attack speed encoding: " + attackSpeedId);
+        }
 
         // The next byte is the number of attack damages present on the item.
         int damageCount = byteReader.read().value();
@@ -97,14 +100,12 @@ public class DamageDataTransformer extends DataTransformer<DamageData> {
         List<Pair<DamageType, RangedValue>> damages = new ArrayList<>();
 
         for (int i = 0; i < damageCount; i++) {
-            // The first byte is the id of the skill (`ETFWAN`, where N represents Neutral).
+            // The first byte is the id of the skill (`ETWFAN`, where N represents Neutral).
             int damageTypeId = byteReader.read().value();
+            DamageType damageType = DamageType.fromEncodingId(damageTypeId);
 
-            DamageType damageType;
-            if (damageTypeId == 5) {
-                damageType = DamageType.NEUTRAL;
-            } else {
-                damageType = DamageType.fromElement(Element.values()[damageTypeId]);
+            if (damageType == null) { // Sometimes null when users mess with custom encoding
+                return ErrorOr.error("Invalid damage type encoding: " + damageTypeId);
             }
 
             // The next bytes are the minimum damage bytes, which are assembled into an integer.
@@ -116,6 +117,6 @@ public class DamageDataTransformer extends DataTransformer<DamageData> {
             damages.add(new Pair<>(damageType, new RangedValue(minDamage, maxDamage)));
         }
 
-        return ErrorOr.of(new DamageData(Optional.ofNullable(attackSpeed), damages));
+        return ErrorOr.of(new DamageData(Optional.of(attackSpeed), damages));
     }
 }

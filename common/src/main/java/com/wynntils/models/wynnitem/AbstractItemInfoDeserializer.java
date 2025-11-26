@@ -1,9 +1,10 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.wynnitem;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -13,6 +14,7 @@ import com.wynntils.core.text.StyledText;
 import com.wynntils.models.character.type.ClassType;
 import com.wynntils.models.elements.type.Element;
 import com.wynntils.models.elements.type.Skill;
+import com.wynntils.models.festival.type.FestivalType;
 import com.wynntils.models.gear.type.GearAttackSpeed;
 import com.wynntils.models.gear.type.GearMajorId;
 import com.wynntils.models.gear.type.GearMetaInfo;
@@ -24,11 +26,12 @@ import com.wynntils.models.stats.type.DamageType;
 import com.wynntils.models.stats.type.FixedStats;
 import com.wynntils.models.stats.type.StatPossibleValues;
 import com.wynntils.models.stats.type.StatType;
+import com.wynntils.models.wynnitem.type.DropRestriction;
 import com.wynntils.models.wynnitem.type.ItemMaterial;
 import com.wynntils.models.wynnitem.type.ItemObtainInfo;
 import com.wynntils.models.wynnitem.type.ItemObtainType;
+import com.wynntils.utils.EnumUtils;
 import com.wynntils.utils.JsonUtils;
-import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.type.Pair;
 import com.wynntils.utils.type.RangedValue;
 import com.wynntils.utils.wynn.WynnUtils;
@@ -64,6 +67,10 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         String typeString;
         if (json.has("accessoryType")) {
             typeString = json.get("accessoryType").getAsString();
+        } else if (json.has("weaponType")) {
+            typeString = json.get("weaponType").getAsString();
+        } else if (json.has("armourType")) {
+            typeString = json.get("armourType").getAsString();
         } else {
             typeString = json.get("type").getAsString();
         }
@@ -72,7 +79,12 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
 
     protected GearMetaInfo parseMetaInfo(JsonObject json, String apiName, GearType type) {
         GearRestrictions restrictions = parseRestrictions(json);
-        ItemMaterial material = parseMaterial(json, type);
+        ItemMaterial material = parseMaterial(json);
+
+        if (material == null || material.itemStack().isEmpty()) {
+            WynntilsMod.warn("Failed to parse material for " + json.get("name").getAsString());
+            material = ItemMaterial.fromItemId("minecraft:air", 0);
+        }
 
         List<ItemObtainInfo> obtainInfo = parseObtainInfo(json);
 
@@ -89,44 +101,72 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
     protected List<ItemObtainInfo> parseObtainInfo(JsonObject json) {
         List<ItemObtainInfo> obtainInfo = new ArrayList<>();
 
-        // Add API-obtained information
-        String apiObtainName =
-                JsonUtils.getNullableJsonString(JsonUtils.getNullableJsonObject(json, "dropMeta"), "name");
-        List<ItemObtainType> apiObtainTypes = parseObtainTypes(json);
-        for (ItemObtainType apiObtainType : apiObtainTypes) {
-            switch (apiObtainType) {
-                case NORMAL_MOB_DROP -> {
-                    // Only add this if we do not have more specific information
-                    boolean hasSpecialMob =
-                            obtainInfo.stream().anyMatch(o -> o.sourceType() == ItemObtainType.SPECIAL_MOB_DROP);
-                    if (!hasSpecialMob) {
-                        obtainInfo.add(new ItemObtainInfo(ItemObtainType.NORMAL_MOB_DROP, Optional.empty()));
+        DropRestriction dropRestriction = DropRestriction.NEVER;
+
+        // One item in the API currently has no dropRestriction
+        if (json.has("dropRestriction")) {
+            dropRestriction =
+                    DropRestriction.fromApiName(json.get("dropRestriction").getAsString());
+        }
+
+        List<ItemObtainType> itemObtainTypes = new ArrayList<>();
+
+        if (json.has("dropMeta")) {
+            List<String> dropMetaTypes =
+                    JsonUtils.getStringOrStringArray(JsonUtils.getNullableJsonObject(json, "dropMeta"), "type");
+            for (String dropMetaType : dropMetaTypes) {
+                ItemObtainType itemObtainType = ItemObtainType.fromApiName(dropMetaType);
+
+                if (itemObtainType != null) {
+                    itemObtainTypes.add(itemObtainType);
+                } else {
+                    WynntilsMod.warn("Unknown drop meta type: " + dropMetaType);
+                }
+            }
+        }
+
+        if (itemObtainTypes.isEmpty()) {
+            JsonObject requirements = JsonUtils.getNullableJsonObject(json, "requirements");
+            int level = requirements.get("level").getAsInt();
+            String levelRange = "Between level " + Math.max(level - 4, 1) + " and " + (level + 4);
+
+            if (dropRestriction == DropRestriction.NORMAL) {
+                obtainInfo.add(new ItemObtainInfo(ItemObtainType.NORMAL_MOB_DROP, Optional.of(levelRange)));
+                obtainInfo.add(new ItemObtainInfo(ItemObtainType.LOOT_CHEST, Optional.of(levelRange)));
+            } else if (dropRestriction == DropRestriction.LOOT_CHEST) {
+                obtainInfo.add(new ItemObtainInfo(ItemObtainType.CAVE_LOOT_CHEST, Optional.of(levelRange)));
+            }
+        } else {
+            JsonObject dropMeta = json.getAsJsonObject("dropMeta");
+
+            if (dropMeta != null && !dropMeta.isJsonNull()) {
+                for (ItemObtainType itemObtainType : itemObtainTypes) {
+                    if (itemObtainType == ItemObtainType.UNKNOWN) continue;
+
+                    if (itemObtainType == ItemObtainType.EVENT) {
+                        FestivalType festivalType = FestivalType.valueOf(
+                                dropMeta.get("event").getAsString().toUpperCase(Locale.ROOT));
+                        obtainInfo.add(
+                                new ItemObtainInfo(ItemObtainType.EVENT, Optional.of(festivalType.getFullName())));
+                    } else {
+                        obtainInfo.add(new ItemObtainInfo(
+                                itemObtainType, Optional.of(dropMeta.get("name").getAsString())));
                     }
                 }
-                case DUNGEON_RAIN -> {
-                    // Only add this if we do not have more specific information
-                    boolean hasDungeon =
-                            obtainInfo.stream().anyMatch(o -> o.sourceType().isDungeon());
-                    if (!hasDungeon) {
-                        obtainInfo.add(new ItemObtainInfo(ItemObtainType.DUNGEON_RAIN, Optional.empty()));
-                    }
-                }
-                default -> {
-                    // Add the API-obtained information
-                    obtainInfo.add(new ItemObtainInfo(apiObtainType, Optional.ofNullable(apiObtainName)));
-                }
+            } else if (dropRestriction == DropRestriction.DUNGEON) {
+                obtainInfo.add(new ItemObtainInfo(ItemObtainType.FORGERY_CHEST, Optional.empty()));
             }
         }
 
         if (obtainInfo.isEmpty()) {
             // We have no information on how to obtain this
-            obtainInfo.add(new ItemObtainInfo(ItemObtainType.UNKNOWN, Optional.empty()));
+            obtainInfo.add(ItemObtainInfo.UNKNOWN);
         }
 
         return List.copyOf(obtainInfo);
     }
 
-    protected Optional<StyledText> parseLore(JsonObject json) {
+    private Optional<StyledText> parseLore(JsonObject json) {
         String lore = JsonUtils.getNullableJsonString(json, "lore");
         if (lore == null) return Optional.empty();
 
@@ -140,11 +180,7 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         return GearRestrictions.fromString(restrictions);
     }
 
-    protected ItemMaterial parseMaterial(JsonObject json, GearType type) {
-        return type.isArmor() ? parseArmorType(json, type) : parseOtherMaterial(json, type);
-    }
-
-    protected List<ItemObtainType> parseObtainTypes(JsonObject json) {
+    private List<ItemObtainType> parseObtainTypes(JsonObject json) {
         List<ItemObtainType> types = new ArrayList<>();
 
         JsonObject dropMeta = JsonUtils.getNullableJsonObject(json, "dropMeta");
@@ -172,52 +208,62 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         return List.copyOf(types);
     }
 
-    protected ItemMaterial parseArmorType(JsonObject json, GearType gearType) {
-        // We might have a specified material (like a carved pumpkin or mob head),
-        // if so this takes precedence
-        String material = JsonUtils.getNullableJsonString(json, "material");
-        if (material != null) {
-            return parseOtherMaterial(json, gearType);
+    protected ItemMaterial parseMaterial(JsonObject json) {
+        if (!json.has("icon")) {
+            WynntilsMod.warn(
+                    "Item DB does not contain an icon for " + json.get("name").getAsString());
+            return ItemMaterial.fromItemId("minecraft:air", 0);
         }
 
-        // Some helmets are player heads
-        String skin = JsonUtils.getNullableJsonString(json, "skin");
-        if (skin != null) {
-            return ItemMaterial.fromPlayerHeadUUID(skin);
-        }
+        JsonObject icon = json.getAsJsonObject("icon");
 
-        String materialType = JsonUtils.getNullableJsonString(json, "armorType").toLowerCase(Locale.ROOT);
+        String iconFormat = icon.get("format").getAsString();
 
-        CustomColor color = null;
-        if (materialType.equals("leather")) {
-            String colorStr = JsonUtils.getNullableJsonString(json, "armorColor");
-            // Oddly enough a lot of items has a "dummy" color value of "160,101,64"; ignore them
-            if (colorStr != null && !colorStr.equals("160,101,64")) {
-                String[] colorArray = colorStr.split("[, ]");
-                if (colorArray.length == 3) {
-                    int r = Integer.parseInt(colorArray[0]);
-                    int g = Integer.parseInt(colorArray[1]);
-                    int b = Integer.parseInt(colorArray[2]);
-                    color = new CustomColor(r, g, b);
+        switch (iconFormat) {
+            case "attribute" -> {
+                JsonObject value = icon.get("value").getAsJsonObject();
+                JsonElement customModelData = value.get("customModelData");
+
+                int customModelDataInt;
+                if (customModelData.isJsonObject()) {
+                    // New format
+                    JsonObject customModelDataObject = customModelData.getAsJsonObject();
+                    JsonArray floats = customModelDataObject.getAsJsonArray("rangeDispatch");
+                    if (floats != null && !floats.isEmpty()) {
+                        customModelDataInt = floats.get(0).getAsInt();
+                    } else {
+                        WynntilsMod.warn("Item DB does not contain custom model data for "
+                                + json.get("name").getAsString());
+                        return ItemMaterial.fromItemId("minecraft:air", 0);
+                    }
+                } else if (customModelData.isJsonPrimitive()) {
+                    // Original format, only the single model data was sent as either a string or an int
+                    if (customModelData.getAsJsonPrimitive().isNumber()) {
+                        customModelDataInt = customModelData.getAsInt();
+                    } else {
+                        customModelDataInt = Integer.parseInt(customModelData.getAsString());
+                    }
+                } else {
+                    WynntilsMod.warn("Unexpected custom model data format for "
+                            + json.get("name").getAsString());
+                    return ItemMaterial.fromItemId("minecraft:air", 0);
                 }
+
+                return ItemMaterial.fromItemId(value.get("id").getAsString(), customModelDataInt);
+            }
+            case "skin" -> {
+                return ItemMaterial.fromPlayerHeadUUID(icon.get("value").getAsString());
+            }
+            case "legacy" -> {
+                String material = icon.get("value").getAsString();
+                String[] materialArray = material.split(":");
+                int itemTypeCode = Integer.parseInt(materialArray[0]);
+                int damageCode = materialArray.length > 1 ? Integer.parseInt(materialArray[1]) : 0;
+                return ItemMaterial.fromItemTypeCode(itemTypeCode, damageCode);
             }
         }
 
-        return ItemMaterial.fromArmorType(materialType, gearType, color);
-    }
-
-    protected ItemMaterial parseOtherMaterial(JsonObject json, GearType gearType) {
-        String material = JsonUtils.getNullableJsonString(json, "material");
-        if (material == null) {
-            // We're screwed. The best we can do is to give a generic default representation
-            // for this gear type
-            return ItemMaterial.fromGearType(gearType);
-        }
-
-        String[] materialArray = material.split(":");
-        int itemTypeCode = Integer.parseInt(materialArray[0]);
-        int damageCode = materialArray.length > 1 ? Integer.parseInt(materialArray[1]) : 0;
-        return ItemMaterial.fromItemTypeCode(itemTypeCode, damageCode);
+        return null;
     }
 
     protected GearRequirements parseRequirements(JsonObject json, GearType type) {
@@ -235,7 +281,7 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         return new GearRequirements(level, classType, skills, quest);
     }
 
-    protected Optional<ClassType> parseClassType(JsonObject json, GearType type) {
+    private Optional<ClassType> parseClassType(JsonObject json, GearType type) {
         if (type.isWeapon()) {
             return Optional.of(type.getClassReq());
         }
@@ -246,7 +292,7 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         return Optional.of(ClassType.fromName(classReq));
     }
 
-    protected List<Pair<Skill, Integer>> parseSkills(JsonObject json) {
+    private List<Pair<Skill, Integer>> parseSkills(JsonObject json) {
         List<Pair<Skill, Integer>> list = new ArrayList<>();
         for (Skill skill : Skill.values()) {
             int minPoints = JsonUtils.getNullableJsonInt(json, skill.getApiName());
@@ -259,7 +305,7 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         return List.copyOf(list);
     }
 
-    protected Optional<String> parseQuest(JsonObject json) {
+    private Optional<String> parseQuest(JsonObject json) {
         String questName = JsonUtils.getNullableJsonString(json, "quest");
         if (questName == null) return Optional.empty();
 
@@ -270,7 +316,7 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         JsonObject baseStats = JsonUtils.getNullableJsonObject(json, "base");
         JsonObject identifications = JsonUtils.getNullableJsonObject(json, "identifications");
 
-        int healthBuff = JsonUtils.getNullableJsonInt(baseStats, "health");
+        int healthBuff = JsonUtils.getNullableJsonInt(baseStats, "baseHealth");
         String attackSpeedStr = JsonUtils.getNullableJsonString(json, "attackSpeed");
         Optional<GearAttackSpeed> attackSpeed = Optional.ofNullable(GearAttackSpeed.fromString(attackSpeedStr));
 
@@ -281,25 +327,38 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         return new FixedStats(healthBuff, attackSpeed, majorIds, damages, defences);
     }
 
-    protected Optional<GearMajorId> parseMajorIds(JsonObject json) {
+    private Optional<GearMajorId> parseMajorIds(JsonObject json) {
         JsonObject majorIdsJson = JsonUtils.getNullableJsonObject(json, "majorIds");
         if (majorIdsJson == null || majorIdsJson.isJsonNull() || majorIdsJson.isEmpty()) return Optional.empty();
 
-        return Optional.of(new GearMajorId(
-                majorIdsJson.get("name").getAsString(),
-                StyledText.fromString(
-                        majorIdsJson.get("description").getAsString().replaceAll("&", "§"))));
+        Map<String, JsonElement> majorIdMap = majorIdsJson.asMap();
+
+        if (majorIdMap.size() > 1) {
+            WynntilsMod.warn("Item DB contains multiple major IDs for "
+                    + json.get("name").getAsString());
+        }
+
+        if (majorIdMap.isEmpty()) return Optional.empty();
+
+        Map.Entry<String, JsonElement> majorIdElement =
+                majorIdMap.entrySet().iterator().next();
+
+        // Wynncraft API now ships HTML tags in the description (as they have a custom markup language internally)
+        StyledText description =
+                StyledText.fromString(majorIdElement.getValue().getAsString().replaceAll("<[^>]*>", ""));
+
+        return Optional.of(new GearMajorId(majorIdElement.getKey(), description));
     }
 
-    protected List<Pair<DamageType, RangedValue>> parseDamages(JsonObject json) {
+    private List<Pair<DamageType, RangedValue>> parseDamages(JsonObject json) {
         List<Pair<DamageType, RangedValue>> list = new ArrayList<>();
 
         // First look for neutral damage, which has a non-standard name
-        addDamageStat(list, DamageType.NEUTRAL, json.get("damage"));
+        addDamageStat(list, DamageType.NEUTRAL, json.get("baseDamage"));
 
         // Then check for elemental damage
         for (Element element : Models.Element.getGearElementOrder()) {
-            String damageName = element.name().toLowerCase(Locale.ROOT) + "Damage";
+            String damageName = "base" + EnumUtils.toNiceString(element) + "Damage";
             addDamageStat(list, DamageType.fromElement(element), json.get(damageName));
         }
 
@@ -307,7 +366,7 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         return List.copyOf(list);
     }
 
-    protected void addDamageStat(
+    private void addDamageStat(
             List<Pair<DamageType, RangedValue>> list, DamageType damageType, JsonElement damageJson) {
         if (damageJson == null) return;
 
@@ -319,10 +378,10 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
         list.add(Pair.of(damageType, range));
     }
 
-    protected List<Pair<Element, Integer>> parseDefences(JsonObject json) {
+    private List<Pair<Element, Integer>> parseDefences(JsonObject json) {
         List<Pair<Element, Integer>> list = new ArrayList<>();
         for (Element element : Models.Element.getGearElementOrder()) {
-            String defenceApiName = element.name().toLowerCase(Locale.ROOT) + "Defence";
+            String defenceApiName = "base" + element.getDisplayName() + "Defence";
 
             int minPoints = JsonUtils.getNullableJsonInt(json, defenceApiName);
             if (minPoints == 0) continue;
@@ -350,7 +409,7 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
             String statApiName = entry.getKey();
 
             if (statApiName.equals("elementalDefense")) {
-                // The API is inconsistent, and rarely usese "elementalDefense" instead of "elementalDefence"
+                // The API is inconsistent, and rarely uses "elementalDefense" instead of "elementalDefence"
                 statApiName = "elementalDefence";
             }
 
@@ -383,8 +442,14 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
                 baseValue = JsonUtils.getNullableJsonInt(statObject, "raw");
                 preIdentified = false;
 
-                apiRange = RangedValue.of(
-                        statObject.get("min").getAsInt(), statObject.get("max").getAsInt());
+                if (statObject.has("min") && statObject.has("max")) {
+                    apiRange = RangedValue.of(
+                            statObject.get("min").getAsInt(),
+                            statObject.get("max").getAsInt());
+                } else {
+                    // Sometimes, the api does not return min or max values, so we can't do verification
+                    apiRange = RangedValue.NONE;
+                }
             }
 
             // If the base value is 0, this stat is not present on the item
@@ -405,9 +470,12 @@ public abstract class AbstractItemInfoDeserializer<T> implements JsonDeserialize
             RangedValue range = StatCalculator.calculatePossibleValuesRange(baseValue, preIdentified, statType);
 
             // Verify that the calculated range matches the API's range
-            if (!apiRange.equals(range)) {
-                WynntilsMod.warn(
-                        "Stat " + statType.getApiName() + " has a range mismatch: " + apiRange + " vs " + range);
+            if (apiRange.equals(RangedValue.NONE)) {
+                WynntilsMod.warn(json.get("name").getAsString() + "'s stat " + statType.getApiName()
+                        + " has it's min-max range missing in the API");
+            } else if (!apiRange.equals(range)) {
+                WynntilsMod.warn(json.get("name").getAsString() + "'s stat " + statType.getApiName()
+                        + " has a range mismatch: API " + apiRange + " vs calculated " + range);
             }
 
             StatPossibleValues possibleValues = new StatPossibleValues(statType, range, baseValue, preIdentified);

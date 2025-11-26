@@ -1,14 +1,12 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.rewards;
 
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Model;
-import com.wynntils.core.components.Models;
-import com.wynntils.core.net.UrlId;
-import com.wynntils.core.net.event.NetResultProcessedEvent;
+import com.wynntils.core.net.DownloadRegistry;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.handlers.item.ItemAnnotation;
 import com.wynntils.models.gear.type.GearTier;
@@ -18,44 +16,24 @@ import com.wynntils.models.rewards.type.CharmInfo;
 import com.wynntils.models.rewards.type.CharmInstance;
 import com.wynntils.models.rewards.type.TomeInfo;
 import com.wynntils.models.rewards.type.TomeInstance;
-import com.wynntils.models.wynnitem.WynnItemModel;
 import com.wynntils.models.wynnitem.parsing.WynnItemParseResult;
 import com.wynntils.models.wynnitem.parsing.WynnItemParser;
 import java.util.List;
 import java.util.stream.Stream;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.bus.api.SubscribeEvent;
 
-public class RewardsModel extends Model {
+public final class RewardsModel extends Model {
     private final TomeInfoRegistry tomeInfoRegistry = new TomeInfoRegistry();
     private final CharmInfoRegistry charmInfoRegistry = new CharmInfoRegistry();
 
-    public RewardsModel(WynnItemModel wynnItemModel) {
-        super(List.of(wynnItemModel));
-
-        // We do not explicitly load the ingredient DB here,
-        // but when all of it's dependencies are loaded,
-        // the NetResultProcessedEvent will trigger the load.
+    public RewardsModel() {
+        super(List.of());
     }
 
     @Override
-    public void reloadData() {
-        tomeInfoRegistry.reloadData();
-        charmInfoRegistry.reloadData();
-    }
-
-    @SubscribeEvent
-    public void onDataLoaded(NetResultProcessedEvent.ForUrlId event) {
-        UrlId urlId = event.getUrlId();
-        if (urlId == UrlId.DATA_STATIC_ITEM_OBTAIN || urlId == UrlId.DATA_STATIC_MATERIAL_CONVERSION) {
-            // We need both material conversio  and obtain info to be able to load the ingredient DB
-            if (!Models.WynnItem.hasObtainInfo()) return;
-            if (!Models.WynnItem.hasMaterialConversionInfo()) return;
-
-            tomeInfoRegistry.reloadData();
-            charmInfoRegistry.reloadData();
-            return;
-        }
+    public void registerDownloads(DownloadRegistry registry) {
+        tomeInfoRegistry.registerDownloads(registry);
+        charmInfoRegistry.registerDownloads(registry);
     }
 
     public CharmInfo getCharmInfoFromDisplayName(String name) {
@@ -91,13 +69,18 @@ public class RewardsModel extends Model {
         return new CharmItem(charmInfo, CharmInstance.create(result.rerolls(), charmInfo, result.identifications()));
     }
 
-    public TomeItem fromTomeItemStack(ItemStack itemStack, StyledText name) {
+    public TomeItem fromTomeItemStack(ItemStack itemStack, StyledText name, String tomeName, boolean isUnidentified) {
         GearTier gearTier = GearTier.fromStyledText(name);
 
-        TomeInfo tomeInfo = tomeInfoRegistry.getFromDisplayName(name.getStringWithoutFormatting());
+        TomeInfo tomeInfo = tomeInfoRegistry.getFromDisplayName(tomeName);
         if (tomeInfo == null) {
-            WynntilsMod.warn("Could not find tome info for " + name.getStringWithoutFormatting());
+            WynntilsMod.warn("Could not find tome info for " + tomeName + " (Originally "
+                    + StyledText.fromComponent(itemStack.getHoverName()).getStringWithoutFormatting() + ")");
             return null;
+        }
+
+        if (isUnidentified) {
+            return new TomeItem(tomeInfo, null);
         }
 
         WynnItemParseResult result = WynnItemParser.parseItemStack(itemStack, tomeInfo.getVariableStatsMap());

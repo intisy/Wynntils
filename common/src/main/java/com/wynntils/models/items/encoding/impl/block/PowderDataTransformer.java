@@ -1,9 +1,11 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.items.encoding.impl.block;
 
+import com.wynntils.core.WynntilsMod;
+import com.wynntils.models.elements.type.Element;
 import com.wynntils.models.elements.type.Powder;
 import com.wynntils.models.items.encoding.data.PowderData;
 import com.wynntils.models.items.encoding.type.DataTransformer;
@@ -22,7 +24,7 @@ public class PowderDataTransformer extends DataTransformer<PowderData> {
     @Override
     public ErrorOr<UnsignedByte[]> encodeData(ItemTransformingVersion version, PowderData data) {
         return switch (version) {
-            case VERSION_1 -> encodePowderData(data);
+            case VERSION_1, VERSION_2 -> encodePowderData(data);
         };
     }
 
@@ -34,7 +36,7 @@ public class PowderDataTransformer extends DataTransformer<PowderData> {
     @Override
     public ErrorOr<PowderData> decodeData(ItemTransformingVersion version, ArrayReader<UnsignedByte> byteReader) {
         return switch (version) {
-            case VERSION_1 -> decodePowderData(byteReader);
+            case VERSION_1, VERSION_2 -> decodePowderData(byteReader);
         };
     }
 
@@ -58,7 +60,7 @@ public class PowderDataTransformer extends DataTransformer<PowderData> {
         // 5 `0` bits are used to represent that no powder is present at the slot.
         for (int i = 0; i < data.powders().size(); i++) {
             Pair<Powder, Integer> powder = data.powders().get(i);
-            int element = powder.key().ordinal();
+            int element = powder.key().getElement().getEncodingId();
             int tier = powder.value();
             int powderDataIndex = i * 5;
 
@@ -101,6 +103,10 @@ public class PowderDataTransformer extends DataTransformer<PowderData> {
         // The second byte is the number of powders
         int powderCount = byteReader.read().value();
 
+        if (powderCount > powderSlots) {
+            WynntilsMod.warn("Powder count is greater than powder slots. This should not happen.");
+        }
+
         // The powder data is encoded as bits, a powder needs 5 bits to encode
         // That means the total size is 5 * powderCount,
         // which is padded to the nearest byte
@@ -121,7 +127,7 @@ public class PowderDataTransformer extends DataTransformer<PowderData> {
 
         // Decode the powder data
         List<Pair<Powder, Integer>> data = new ArrayList<>();
-        for (int i = 0; i < powderCount; i++) {
+        for (int i = 0; i < Math.min(powderCount, powderSlots); i++) {
             int powderDataIndex = i * 5;
 
             // Read the 5 bits for the powder
@@ -135,12 +141,29 @@ public class PowderDataTransformer extends DataTransformer<PowderData> {
                 }
             }
 
+            if (powderValue == 0) {
+                // No powder is present at the slot
+                // Currently, you can't create an item that has an empty powder slot and a filled one after it
+                // If this becomes possible, we need to add an "empty" powder to the data list
+                continue;
+            }
+
             // Decode the powder value
             int element = powderValue / 6;
             int tier = powderValue % 6;
 
+            // If the current powder is a tier 6 powder, it's encoded as the "tier 0" of the next element
+            if (tier == 0) {
+                element -= 1;
+                tier = 6;
+            }
+
             // Add the powder to the data
-            data.add(new Pair<>(Powder.values()[element - 1], tier));
+            Powder powder = Powder.fromElement(Element.fromEncodingId(element));
+            if (powder == null) { // Sometimes null when users mess with custom encoding
+                return ErrorOr.error("Invalid powder element encoding: " + element);
+            }
+            data.add(new Pair<>(powder, tier));
         }
 
         return ErrorOr.of(new PowderData(powderSlots, data));

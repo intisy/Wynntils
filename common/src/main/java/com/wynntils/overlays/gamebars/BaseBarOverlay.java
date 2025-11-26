@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.gamebars;
@@ -8,7 +8,6 @@ import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Managers;
-import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.overlays.Overlay;
 import com.wynntils.core.consumers.overlays.OverlayPosition;
 import com.wynntils.core.consumers.overlays.OverlaySize;
@@ -24,25 +23,30 @@ import com.wynntils.utils.render.Texture;
 import com.wynntils.utils.render.buffered.BufferedFontRenderer;
 import com.wynntils.utils.render.buffered.BufferedRenderUtils;
 import com.wynntils.utils.render.type.TextShadow;
+import com.wynntils.utils.render.type.UniversalTexture;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 
 public abstract class BaseBarOverlay extends Overlay {
     @Persisted(i18nKey = "feature.wynntils.gameBarsOverlay.overlay.baseBar.textShadow")
-    public final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
+    protected final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted(i18nKey = "feature.wynntils.gameBarsOverlay.overlay.baseBar.flip")
-    public final Config<Boolean> flip = new Config<>(false);
+    private final Config<Boolean> flip = new Config<>(false);
+
+    @Persisted(i18nKey = "feature.wynntils.gameBarsOverlay.overlay.baseBar.barTexture")
+    protected final Config<UniversalTexture> barTexture = new Config<>(UniversalTexture.A);
 
     @Persisted(i18nKey = "feature.wynntils.gameBarsOverlay.overlay.baseBar.animationTime")
-    public final Config<Float> animationTime = new Config<>(2f);
+    private final Config<Float> animationTime = new Config<>(2f);
 
     @Persisted(i18nKey = "feature.wynntils.gameBarsOverlay.overlay.baseBar.shouldDisplayOriginal")
-    public final Config<Boolean> shouldDisplayOriginal = new Config<>(false);
+    protected final Config<Boolean> shouldDisplayOriginal = new Config<>(false);
 
     // hacky override of custom color
     @Persisted(i18nKey = "feature.wynntils.gameBarsOverlay.overlay.baseBar.textColor")
-    public final Config<CustomColor> textColor = new Config<>(CommonColors.WHITE);
+    protected final Config<CustomColor> textColor = new Config<>(CommonColors.WHITE);
 
     protected float currentProgress = 0f;
 
@@ -53,17 +57,15 @@ public abstract class BaseBarOverlay extends Overlay {
     }
 
     protected float textureHeight() {
-        return Texture.UNIVERSAL_BAR.height() / 2f;
+        return barTexture.get().getHeight();
     }
 
     protected abstract BossBarProgress progress();
 
     protected abstract Class<? extends TrackedBar> getTrackedBarClass();
 
-    protected abstract boolean isActive();
-
     // As this is an abstract class, this event was subscribed to manually in ctor
-    protected void onBossBarAdd(BossBarAddedEvent event) {
+    private void onBossBarAdd(BossBarAddedEvent event) {
         if (!Managers.Overlay.isEnabled(this)) return;
         if (!event.getTrackedBar().getClass().equals(getTrackedBarClass())) return;
 
@@ -74,7 +76,7 @@ public abstract class BaseBarOverlay extends Overlay {
 
     @Override
     public void tick() {
-        if (!Models.WorldState.onWorld() || !isActive()) return;
+        if (!isRendered() || progress() == null) return;
 
         if (animationTime.get() == 0) {
             currentProgress = progress().progress();
@@ -86,30 +88,49 @@ public abstract class BaseBarOverlay extends Overlay {
     }
 
     @Override
-    public void render(PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
-        if (!Models.WorldState.onWorld() || !isActive()) return;
+    public void render(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        float renderedProgress = Math.round((flip.get() ? -1 : 1) * currentProgress * 100) / 100f;
+        renderAll(guiGraphics, bufferSource, renderedProgress);
+    }
+
+    @Override
+    public void renderPreview(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        if (progress() == null) {
+            renderAll(guiGraphics, bufferSource, 50);
+            return;
+        }
+        float renderedProgress = Math.round((flip.get() ? -1 : 1) * currentProgress * 100) / 100f;
+        renderAll(guiGraphics, bufferSource, renderedProgress);
+    }
+
+    private void renderAll(GuiGraphics guiGraphics, MultiBufferSource bufferSource, float renderedProgress) {
+        PoseStack poseStack = guiGraphics.pose();
 
         float barHeight = textureHeight() * (this.getWidth() / 81);
         float renderY = getModifiedRenderY(barHeight + 10);
 
         renderText(poseStack, bufferSource, renderY, text());
 
-        float renderedProgress = Math.round((flip.get() ? -1 : 1) * currentProgress * 100) / 100f;
         renderBar(poseStack, bufferSource, renderY + 10, barHeight, renderedProgress);
     }
 
     protected String text() {
         BossBarProgress barProgress = progress();
+        if (progress() == null) {
+            return icon();
+        }
         return String.format(
                 "%s %s %s",
-                barProgress.value().current(), icon(), barProgress.value().max());
+                progress().value().current(), icon(), progress().value().max());
     }
 
     protected String icon() {
         return "";
     }
 
-    protected float getModifiedRenderY(float renderedHeight) {
+    private float getModifiedRenderY(float renderedHeight) {
         return switch (this.getRenderVerticalAlignment()) {
             case TOP -> this.getRenderY();
             case MIDDLE -> this.getRenderY() + (this.getHeight() - renderedHeight) / 2;
@@ -117,26 +138,21 @@ public abstract class BaseBarOverlay extends Overlay {
         };
     }
 
-    @Override
-    protected void onConfigUpdate(Config<?> config) {}
-
     protected void renderBar(
             PoseStack poseStack, MultiBufferSource bufferSource, float renderY, float renderHeight, float progress) {
-        Texture universalBarTexture = Texture.UNIVERSAL_BAR;
-
         BufferedRenderUtils.drawColoredProgressBar(
                 poseStack,
                 bufferSource,
-                universalBarTexture,
+                Texture.UNIVERSAL_BAR,
                 this.textColor.get(),
-                this.getRenderX(),
+                getRenderX(),
                 renderY,
-                this.getRenderX() + this.getWidth(),
+                getRenderX() + getWidth(),
                 renderY + renderHeight,
                 0,
-                0,
-                universalBarTexture.width(),
-                universalBarTexture.height(),
+                barTexture.get().getTextureY1(),
+                Texture.UNIVERSAL_BAR.width(),
+                barTexture.get().getTextureY2(),
                 progress);
     }
 

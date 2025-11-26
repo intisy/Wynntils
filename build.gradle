@@ -15,7 +15,7 @@ def usingHotswapAgent = project.hasProperty("wynntils.hotswap") ? project.getPro
 
 // On the release branches, this string will be automatically updated by the bots
 // Do not change this in the main branch!
-version = "2.0.0-SNAPSHOT"
+version = "3.0.0-SNAPSHOT"
 
 subprojects {
     apply plugin: "dev.architectury.loom"
@@ -35,6 +35,8 @@ subprojects {
                 property("devauth.configDir", getRootProject().file(".devauth").absolutePath)
                 if (usingHotswapAgent) {
                     vmArgs "-XX:+AllowEnhancedClassRedefinition"
+                    // https://youtrack.jetbrains.com/issue/JBR-7351/JVM-CodeCache-will-not-be-cleaned-using-G1GC-if-Hotswap-Agent-is-enabled-since-JBR-6419-jbr21.351
+                    vmArgs "-XX:+ClassUnloading"
                     vmArgs "-XX:HotswapAgent=fatjar"
                 }
                 vmArgs "-ea" // run dev builds with asserts
@@ -109,6 +111,13 @@ allprojects {
         }
         json {
             target "src/**/*.json"
+            /*
+             1. spotless replaces the Unicode escapes with the actual characters, worsening readability.
+             2. schemaVersion must be at the top or else Fabric will complain
+             */
+            targetExclude(
+                    "src/main/resources/assets/wynntils/font/*.json",
+                    "src/main/resources/fabric.mod.json")
             gson()
                     .indentWithSpaces(2)
                     .sortByKeys()
@@ -136,7 +145,7 @@ allprojects {
 
             // define the steps to apply to those files
             trimTrailingWhitespace()
-            indentWithSpaces()
+            leadingTabsToSpaces()
             endWithNewline()
         }
     }

@@ -1,13 +1,15 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.services.cosmetics;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.wynntils.core.WynntilsMod;
+import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.components.Service;
+import com.wynntils.features.embellishments.WynntilsCosmeticsFeature;
 import com.wynntils.models.players.WynntilsUser;
 import com.wynntils.models.players.type.CosmeticInfo;
 import com.wynntils.services.cosmetics.type.WynntilsCapeLayer;
@@ -23,9 +25,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import net.minecraft.client.model.PlayerModel;
-import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.renderer.entity.RenderLayerParent;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
@@ -33,20 +36,22 @@ import net.minecraft.world.entity.player.PlayerModelPart;
 
 public class CosmeticsService extends Service {
     private static final BiFunction<
-                    RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>,
-                    EntityModelSet,
+                    LivingEntityRenderer<AbstractClientPlayer, PlayerRenderState, PlayerModel>,
+                    EntityRendererProvider.Context,
                     WynntilsLayer>
-            CAPE_LAYER = (playerRenderer, playerModel) -> new WynntilsCapeLayer(playerRenderer);
+            CAPE_LAYER = (playerRenderer, renderProviderContext) ->
+                    new WynntilsCapeLayer(playerRenderer, renderProviderContext);
     private static final BiFunction<
-                    RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>,
-                    EntityModelSet,
+                    LivingEntityRenderer<AbstractClientPlayer, PlayerRenderState, PlayerModel>,
+                    EntityRendererProvider.Context,
                     WynntilsLayer>
-            ELYTRA_LAYER = (playerRenderer, playerModel) -> new WynntilsElytraLayer(playerRenderer, playerModel);
+            ELYTRA_LAYER = (playerRenderer, renderProviderContext) ->
+                    new WynntilsElytraLayer(playerRenderer, renderProviderContext);
 
     private static final List<
                     BiFunction<
-                            RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>,
-                            EntityModelSet,
+                            LivingEntityRenderer<AbstractClientPlayer, PlayerRenderState, PlayerModel>,
+                            EntityRendererProvider.Context,
                             WynntilsLayer>>
             REGISTERED_LAYERS = List.of(CAPE_LAYER, ELYTRA_LAYER);
 
@@ -60,8 +65,8 @@ public class CosmeticsService extends Service {
     // We don't want to reference Models in the mixin this is called, due to it's unpredictable class loading.
     public static List<
                     BiFunction<
-                            RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>,
-                            EntityModelSet,
+                            LivingEntityRenderer<AbstractClientPlayer, PlayerRenderState, PlayerModel>,
+                            EntityRendererProvider.Context,
                             WynntilsLayer>>
             getRegisteredLayers() {
         return REGISTERED_LAYERS;
@@ -69,25 +74,23 @@ public class CosmeticsService extends Service {
 
     public boolean shouldRenderCape(Player player, boolean elytra) {
         if (player.isInvisible() || !player.isModelPartShown(PlayerModelPart.CAPE)) return false;
-
-        if (Models.Player.getUser(player.getUUID()) == null || getUserCosmeticTexture(player.getUUID()) == null)
+        if (Models.Player.getWynntilsUser(player) == null || getUserCosmeticTexture(player) == null) {
             return false;
+        }
 
-        CosmeticInfo cosmetics = Models.Player.getUser(player.getUUID()).cosmetics();
+        if (McUtils.player().is(player)
+                && !Managers.Feature.getFeatureInstance(WynntilsCosmeticsFeature.class)
+                        .renderOwnCape
+                        .get()) {
+            return false;
+        }
+
+        CosmeticInfo cosmetics = Models.Player.getWynntilsUser(player).cosmetics();
         return (elytra ? cosmetics.hasElytra() : cosmetics.hasCape());
     }
 
-    // TODO: implement ear rendering
-    public boolean shouldRenderEars(AbstractClientPlayer player) {
-        if (player.isInvisible()) return false;
-
-        if (Models.Player.getUser(player.getUUID()) == null) return false;
-
-        return Models.Player.getUser(player.getUUID()).cosmetics().hasEars();
-    }
-
     public ResourceLocation getCapeTexture(Player player) {
-        ResourceLocation[] textures = getUserCosmeticTexture(player.getUUID());
+        ResourceLocation[] textures = getUserCosmeticTexture(player);
         if (textures == null) return null;
 
         int frames = textures.length;
@@ -134,7 +137,7 @@ public class CosmeticsService extends Service {
         }
     }
 
-    public ResourceLocation[] getUserCosmeticTexture(UUID uuid) {
-        return cosmeticTextures.getOrDefault(uuid, null);
+    private ResourceLocation[] getUserCosmeticTexture(Player player) {
+        return cosmeticTextures.getOrDefault(Models.Player.getUserUUID(player), null);
     }
 }

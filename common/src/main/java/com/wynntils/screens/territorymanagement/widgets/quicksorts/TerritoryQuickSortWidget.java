@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2024.
+ * Copyright © Wynntils 2024-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.territorymanagement.widgets.quicksorts;
@@ -64,7 +64,7 @@ public abstract class TerritoryQuickSortWidget extends AbstractWidget {
         if (!this.active || !this.visible) return false;
 
         if (this.isValidClickButton(button)) {
-            boolean clicked = this.clicked(mouseX, mouseY);
+            boolean clicked = this.isMouseOver(mouseX, mouseY);
             if (clicked) {
                 this.playDownSound(Minecraft.getInstance().getSoundManager());
 
@@ -98,7 +98,7 @@ public abstract class TerritoryQuickSortWidget extends AbstractWidget {
         return Services.ItemFilter.getItemFilterString(Map.of(), getSortInfos(), List.of());
     }
 
-    protected final void forwardClick() {
+    private void forwardClick() {
         // Cycle between null and the sort directions
         if (sortDirection == null) {
             sortDirection = SortDirection.ASCENDING;
@@ -107,7 +107,7 @@ public abstract class TerritoryQuickSortWidget extends AbstractWidget {
         }
     }
 
-    protected final void backwardClick() {
+    private void backwardClick() {
         // Cycle between null and the sort directions
         if (sortDirection == null) {
             sortDirection = SortDirection.DESCENDING;
@@ -116,7 +116,7 @@ public abstract class TerritoryQuickSortWidget extends AbstractWidget {
         }
     }
 
-    protected final void resetClick() {
+    private void resetClick() {
         sortDirection = null;
     }
 

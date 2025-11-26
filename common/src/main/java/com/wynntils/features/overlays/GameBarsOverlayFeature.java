@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.overlays;
@@ -12,11 +12,15 @@ import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.mc.event.RenderEvent;
 import com.wynntils.overlays.gamebars.AwakenedProgressBarOverlay;
 import com.wynntils.overlays.gamebars.BloodPoolBarOverlay;
+import com.wynntils.overlays.gamebars.CommanderBarOverlay;
 import com.wynntils.overlays.gamebars.CorruptedBarOverlay;
 import com.wynntils.overlays.gamebars.FocusBarOverlay;
+import com.wynntils.overlays.gamebars.FocusedMobHealthBarOverlay;
 import com.wynntils.overlays.gamebars.HealthBarOverlay;
+import com.wynntils.overlays.gamebars.HolyPowerBarOverlay;
 import com.wynntils.overlays.gamebars.ManaBankBarOverlay;
 import com.wynntils.overlays.gamebars.ManaBarOverlay;
+import com.wynntils.overlays.gamebars.MomentumBarOverlay;
 import com.wynntils.overlays.gamebars.OphanimBarOverlay;
 
 @ConfigCategory(Category.OVERLAYS)
@@ -44,4 +48,16 @@ public class GameBarsOverlayFeature extends Feature {
 
     @OverlayInfo(renderType = RenderEvent.ElementType.GUI, renderAt = RenderState.PRE)
     private final OphanimBarOverlay ophanimBarOverlay = new OphanimBarOverlay();
+
+    @OverlayInfo(renderType = RenderEvent.ElementType.GUI, renderAt = RenderState.PRE)
+    private final HolyPowerBarOverlay holyPowerBarOverlay = new HolyPowerBarOverlay();
+
+    @OverlayInfo(renderType = RenderEvent.ElementType.GUI, renderAt = RenderState.PRE)
+    private final FocusedMobHealthBarOverlay focusedMobHealthBarOverlay = new FocusedMobHealthBarOverlay();
+
+    @OverlayInfo(renderType = RenderEvent.ElementType.GUI, renderAt = RenderState.PRE)
+    private final CommanderBarOverlay commanderBarOverlay = new CommanderBarOverlay();
+
+    @OverlayInfo(renderType = RenderEvent.ElementType.GUI, renderAt = RenderState.PRE)
+    private final MomentumBarOverlay momentumBarOverlay = new MomentumBarOverlay();
 }

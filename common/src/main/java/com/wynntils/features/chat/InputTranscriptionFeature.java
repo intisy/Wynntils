@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.chat;
@@ -33,7 +33,7 @@ import org.lwjgl.glfw.GLFW;
 @ConfigCategory(Category.CHAT)
 public class InputTranscriptionFeature extends Feature {
     @Persisted
-    public final Config<Boolean> transcriptionButtons = new Config<>(true);
+    private final Config<Boolean> transcriptionButtons = new Config<>(true);
 
     private static final int MAX_CHAT_LENGTH = 256;
     // Numbers higher than this will be replaced with "∞"
@@ -41,7 +41,7 @@ public class InputTranscriptionFeature extends Feature {
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
 
     @SubscribeEvent
-    public void onScreenInit(ScreenInitEvent event) {
+    public void onScreenInit(ScreenInitEvent.Pre event) {
         if (!transcriptionButtons.get()) return;
 
         if (event.getScreen() instanceof ChatScreen chatScreen) {
@@ -60,7 +60,7 @@ public class InputTranscriptionFeature extends Feature {
 
     @SubscribeEvent
     public void onEditBoxInsert(EditBoxInsertEvent event) {
-        if (!(McUtils.mc().screen instanceof ChatScreen chatScreen)) return;
+        if (!(McUtils.screen() instanceof ChatScreen chatScreen)) return;
         if (!transcriptionButtons.get()) return;
         if (event.getTextToWrite().isBlank()) return;
 
@@ -91,7 +91,7 @@ public class InputTranscriptionFeature extends Feature {
     @SubscribeEvent
     public void onChatScreenKeyTyped(ChatScreenKeyTypedEvent event) {
         if (event.getKeyCode() != GLFW.GLFW_KEY_BACKSPACE) return;
-        if (!(McUtils.mc().screen instanceof ChatScreen chatScreen)) return;
+        if (!(McUtils.screen() instanceof ChatScreen chatScreen)) return;
         if (!transcriptionButtons.get()) return;
         if (!chatScreen.input.getHighlighted().isBlank()) return;
 

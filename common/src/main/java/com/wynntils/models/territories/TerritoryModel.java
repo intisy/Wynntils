@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.territories;
@@ -12,6 +12,7 @@ import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Handlers;
 import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Model;
+import com.wynntils.core.components.Models;
 import com.wynntils.core.net.Download;
 import com.wynntils.core.net.UrlId;
 import com.wynntils.core.text.StyledText;
@@ -34,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -46,7 +48,8 @@ import net.minecraft.core.Position;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public final class TerritoryModel extends Model {
-    private static final int TERRITORY_UPDATE_MS = 15000;
+    private static final int IN_GUILD_TERRITORY_UPDATE_MS = 15000;
+    private static final int NO_GUILD_TERRITORY_UPDATE_MS = 300000;
     private static final Gson TERRITORY_PROFILE_GSON = new GsonBuilder()
             .registerTypeHierarchyAdapter(TerritoryProfile.class, new TerritoryProfile.TerritoryDeserializer())
             .create();
@@ -60,15 +63,29 @@ public final class TerritoryModel extends Model {
     // This is just a cache of TerritoryPois created for all territoryProfileMap values
     private Set<TerritoryPoi> allTerritoryPois = new HashSet<>();
 
+    private ScheduledFuture<?> scheduledFuture;
     private final ScheduledExecutorService timerExecutor = new ScheduledThreadPoolExecutor(1);
+    private long lastGuildUpdate = 0;
+
+    // Use Athena by default for territories, but after 3 failures switch to the API
+    private static final int MAX_ERRORS = 3;
+    private int athenaCheckErrors = 0;
+    private UrlId lookupUrl = UrlId.DATA_ATHENA_TERRITORY_LIST_V2;
 
     public TerritoryModel() {
         super(List.of());
 
         Handlers.WrappedScreen.registerWrappedScreen(new TerritoryManagementHolder());
+    }
 
-        timerExecutor.scheduleWithFixedDelay(
-                this::updateTerritoryProfileMap, 0, TERRITORY_UPDATE_MS, TimeUnit.MILLISECONDS);
+    @Override
+    public void reloadData() {
+        if (scheduledFuture != null && !scheduledFuture.isCancelled()) {
+            scheduledFuture.cancel(false);
+        }
+
+        scheduledFuture = timerExecutor.scheduleWithFixedDelay(
+                this::updateTerritoryProfileMap, 0, IN_GUILD_TERRITORY_UPDATE_MS, TimeUnit.MILLISECONDS);
     }
 
     public TerritoryProfile getTerritoryProfile(String name) {
@@ -105,19 +122,22 @@ public final class TerritoryModel extends Model {
     public List<TerritoryPoi> getFilteredTerritoryPoisFromAdvancement(
             int filterLevel, TerritoryDefenseFilterType filterType) {
         return switch (filterType) {
-            case HIGHER -> territoryPoiMap.values().stream()
-                    .filter(poi -> poi.getTerritoryInfo().getDefences().getLevel() >= filterLevel)
-                    .collect(Collectors.toList());
-            case LOWER -> territoryPoiMap.values().stream()
-                    .filter(poi -> poi.getTerritoryInfo().getDefences().getLevel() <= filterLevel)
-                    .collect(Collectors.toList());
-            case DEFAULT -> territoryPoiMap.values().stream()
-                    .filter(poi -> poi.getTerritoryInfo().getDefences().getLevel() == filterLevel)
-                    .collect(Collectors.toList());
+            case HIGHER ->
+                territoryPoiMap.values().stream()
+                        .filter(poi -> poi.getTerritoryInfo().getDefences().getLevel() >= filterLevel)
+                        .collect(Collectors.toList());
+            case LOWER ->
+                territoryPoiMap.values().stream()
+                        .filter(poi -> poi.getTerritoryInfo().getDefences().getLevel() <= filterLevel)
+                        .collect(Collectors.toList());
+            case DEFAULT ->
+                territoryPoiMap.values().stream()
+                        .filter(poi -> poi.getTerritoryInfo().getDefences().getLevel() == filterLevel)
+                        .collect(Collectors.toList());
         };
     }
 
-    public TerritoryPoi getTerritoryPoiFromAdvancement(String name) {
+    private TerritoryPoi getTerritoryPoiFromAdvancement(String name) {
         return territoryPoiMap.get(name);
     }
 
@@ -229,7 +249,12 @@ public final class TerritoryModel extends Model {
     }
 
     private void updateTerritoryProfileMap() {
-        Download dl = Managers.Net.download(UrlId.DATA_WYNNCRAFT_TERRITORY_LIST);
+        // If the player is not in a guild, we don't need to update the territory data as often
+        if (!Models.Guild.isInGuild() && System.currentTimeMillis() - lastGuildUpdate < NO_GUILD_TERRITORY_UPDATE_MS) {
+            return;
+        }
+
+        Download dl = Managers.Net.download(lookupUrl);
         dl.handleJsonObject(
                 json -> {
                     Map<String, TerritoryProfile> tempMap = new HashMap<>();
@@ -249,7 +274,20 @@ public final class TerritoryModel extends Model {
                     allTerritoryPois = territoryProfileMap.values().stream()
                             .map(TerritoryPoi::new)
                             .collect(Collectors.toSet());
+
+                    lastGuildUpdate = System.currentTimeMillis();
                 },
-                onError -> WynntilsMod.warn("Failed to update territory data."));
+                onError -> {
+                    WynntilsMod.warn("Failed to update territory data.");
+
+                    if (lookupUrl == UrlId.DATA_ATHENA_TERRITORY_LIST_V2) {
+                        athenaCheckErrors++;
+                        if (athenaCheckErrors >= MAX_ERRORS) {
+                            WynntilsMod.warn(
+                                    "Reached maximum errors for Athena territory lookup, switching to Wynncraft API.");
+                            lookupUrl = UrlId.DATA_WYNNCRAFT_TERRITORY_LIST;
+                        }
+                    }
+                });
     }
 }

@@ -7,6 +7,7 @@ package com.wynntils.services.lootrunpaths;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.services.lootrunpaths.type.LootrunNote;
 import com.wynntils.services.lootrunpaths.type.LootrunPath;
@@ -121,10 +122,12 @@ public final class LootrunPathFileParser {
                 locationJson.addProperty("z", position.z());
                 noteJson.add("location", locationJson);
 
-                noteJson.addProperty(
-                        "note",
-                        Component.Serializer.toJson(
-                                note.component(), McUtils.mc().player.registryAccess()));
+                String noteString = Component.Serializer.toJson(
+                        note.component(), McUtils.mc().player.registryAccess());
+
+                // Parse the JSON string back into a JSON object
+                JsonElement noteElement = JsonParser.parseString(noteString);
+                noteJson.add("note", noteElement);
                 notes.add(noteJson);
             }
             json.add("notes", notes);

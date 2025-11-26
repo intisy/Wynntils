@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2024.
+ * Copyright © Wynntils 2024-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.itemsharing;
@@ -10,6 +10,7 @@ import com.wynntils.core.components.Services;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.models.items.FakeItemStack;
 import com.wynntils.models.items.WynnItem;
+import com.wynntils.models.items.items.game.GearItem;
 import com.wynntils.screens.base.TextboxScreen;
 import com.wynntils.screens.base.WynntilsContainerScreen;
 import com.wynntils.screens.base.widgets.TextInputBoxWidget;
@@ -23,6 +24,7 @@ import com.wynntils.utils.mc.McUtils;
 import com.wynntils.utils.render.FontRenderer;
 import com.wynntils.utils.render.RenderUtils;
 import com.wynntils.utils.render.Texture;
+import com.wynntils.utils.render.buffered.BufferedRenderUtils;
 import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.TextShadow;
 import com.wynntils.utils.render.type.VerticalAlignment;
@@ -164,9 +166,8 @@ public final class SavedItemsScreen extends WynntilsContainerScreen<SavedItemsMe
 
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
-        PoseStack poseStack = guiGraphics.pose();
-
-        RenderUtils.drawTexturedRect(poseStack, Texture.ITEM_RECORD, this.leftPos, this.topPos);
+        BufferedRenderUtils.drawTexturedRect(
+                guiGraphics.pose(), guiGraphics.bufferSource, Texture.ITEM_RECORD, this.leftPos, this.topPos);
     }
 
     @Override
@@ -189,7 +190,7 @@ public final class SavedItemsScreen extends WynntilsContainerScreen<SavedItemsMe
                 Optional<WynnItem> wynnItemOpt = Models.Item.getWynnItem(slot.getItem());
 
                 if (wynnItemOpt.isPresent()) {
-                    McUtils.mc().setScreen(ItemSharingScreen.create(wynnItemOpt.get(), slot.getItem(), true));
+                    McUtils.setScreen(ItemSharingScreen.create(wynnItemOpt.get(), slot.getItem(), true));
                 } else {
                     McUtils.sendMessageToClient(Component.translatable("screens.wynntils.savedItems.unableToShare"));
                 }
@@ -223,14 +224,15 @@ public final class SavedItemsScreen extends WynntilsContainerScreen<SavedItemsMe
         }
 
         for (int selectedSlot : selectedSlots) {
-            RenderUtils.drawRectBorders(
+            BufferedRenderUtils.drawRectBorders(
                     poseStack,
+                    guiGraphics.bufferSource,
                     CommonColors.WHITE,
                     this.leftPos + this.getMenu().getSlot(selectedSlot).x,
                     this.topPos + this.getMenu().getSlot(selectedSlot).y,
                     this.leftPos + this.getMenu().getSlot(selectedSlot).x + 16,
                     this.topPos + this.getMenu().getSlot(selectedSlot).y + 16,
-                    0,
+                    200,
                     1);
         }
 
@@ -296,7 +298,7 @@ public final class SavedItemsScreen extends WynntilsContainerScreen<SavedItemsMe
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         draggingScroll = false;
 
-        Slot dragSelectionEndSlot = super.findSlot(mouseX, mouseY);
+        Slot dragSelectionEndSlot = getHoveredSlot(mouseX, mouseY);
 
         if (dragSelectionStartIndex != -1) {
             int dragSelectionEndIndex =
@@ -394,7 +396,7 @@ public final class SavedItemsScreen extends WynntilsContainerScreen<SavedItemsMe
         }
 
         categoryInput = new TextInputBoxWidget(
-                this.leftPos + 37, this.topPos + 5, 97, 16, null, (TextboxScreen) McUtils.mc().screen, categoryInput);
+                this.leftPos + 37, this.topPos + 5, 97, 16, null, (TextboxScreen) McUtils.screen(), categoryInput);
 
         // Get the current category name and add if we are editing
         if (editingCategory) {
@@ -491,7 +493,14 @@ public final class SavedItemsScreen extends WynntilsContainerScreen<SavedItemsMe
 
             SavedItem savedItem = savedItems.get(i);
 
-            ItemStack itemStack = savedItem.itemStack();
+            ItemStack itemStack;
+            // We can get an accurate itemstack for gear items as their info is in the API
+            if (savedItem.wynnItem() instanceof GearItem gearItem) {
+                itemStack = gearItem.getItemInfo().metaInfo().material().itemStack();
+            } else {
+                // Anything else we have to rely on what was stored
+                itemStack = savedItem.itemStack();
+            }
 
             itemStack = new FakeItemStack(
                     savedItem.wynnItem(), itemStack, "From " + McUtils.playerName() + "'s Item Record");
@@ -518,10 +527,10 @@ public final class SavedItemsScreen extends WynntilsContainerScreen<SavedItemsMe
         }
     }
 
-    private void scrollItems(int scollDirection) {
+    private void scrollItems(int scrollDirection) {
         int maxValue = getMaxScrollOffset();
 
-        itemScrollOffset = MathUtils.clamp(itemScrollOffset + scollDirection, 0, maxValue);
+        itemScrollOffset = MathUtils.clamp(itemScrollOffset + scrollDirection, 0, maxValue);
 
         populateItems();
     }

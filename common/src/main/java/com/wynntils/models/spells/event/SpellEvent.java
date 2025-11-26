@@ -48,13 +48,28 @@ public abstract class SpellEvent extends Event {
         }
     }
 
+    /**
+     * Fired upon spell timeout from not finishing a cast
+     */
+    public static final class Expired extends Casting {
+        public Expired() {
+            super(SpellDirection.NO_SPELL);
+        }
+    }
+
     public static final class Cast extends SpellEvent {
         private final SpellType spellType;
         private final int manaCost;
+        private final int healthCost;
 
         public Cast(SpellType spellType, int manaCost) {
+            this(spellType, manaCost, 0);
+        }
+
+        public Cast(SpellType spellType, int manaCost, int healthCost) {
             this.spellType = spellType;
             this.manaCost = manaCost;
+            this.healthCost = healthCost;
         }
 
         public SpellType getSpellType() {
@@ -63,6 +78,10 @@ public abstract class SpellEvent extends Event {
 
         public int getManaCost() {
             return manaCost;
+        }
+
+        public int getHealthCost() {
+            return healthCost;
         }
     }
 

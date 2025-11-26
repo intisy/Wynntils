@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.players;
@@ -11,6 +11,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Model;
+import com.wynntils.core.components.Models;
 import com.wynntils.core.components.Services;
 import com.wynntils.core.net.ApiResponse;
 import com.wynntils.core.net.UrlId;
@@ -43,7 +44,7 @@ public final class PlayerModel extends Model {
             .registerTypeHierarchyAdapter(WynnPlayerInfo.class, new WynnPlayerInfo.WynnPlayerInfoDeserializer())
             .create();
     private static final String ATHENA_USER_NOT_FOUND = "User not found";
-    private static final Pattern GHOST_WORLD_PATTERN = Pattern.compile("^_(\\d+)$");
+    private static final Pattern GHOST_WORLD_PATTERN = Pattern.compile("^_([A-Z]+)(\\d+)$");
 
     // If there is a failure with the API, give it time to recover
     private static final int ERROR_TIMEOUT_MINUTE = 5;
@@ -75,7 +76,8 @@ public final class PlayerModel extends Model {
 
     // Returns true if the player is on the same server and is not a npc
     public boolean isLocalPlayer(Player player) {
-        return !isNpc(player) && !isPlayerGhost(player);
+        // All local players have UUID version 4, which is a proper Minecraft UUID
+        return player.getUUID().version() == 4;
     }
 
     public boolean isLocalPlayer(String name) {
@@ -86,15 +88,41 @@ public final class PlayerModel extends Model {
 
     public boolean isNpc(Player player) {
         StyledText scoreboardName = StyledText.fromString(player.getScoreboardName());
-        return isNpcName(scoreboardName) || isNpcUuid(player.getUUID());
+        return isNpcName(scoreboardName);
+    }
+
+    public boolean isDisplayPlayer(Player player) {
+        // This is a "fake" player, like an NPC but that you can't interact with,
+        // like the player at the character selection screen
+        var uuid = player.getUUID();
+        if (uuid.version() == 4) return false;
+        if (isNpc(player)) return false;
+        if (isPlayerGhost(player)) return false;
+
+        return true;
     }
 
     public boolean isPlayerGhost(Player player) {
         return ghosts.containsKey(player.getUUID());
     }
 
-    public WynntilsUser getUser(UUID uuid) {
-        return users.getOrDefault(uuid, null);
+    public UUID getUserUUID(Player player) {
+        var uuid = player.getUUID();
+        if (uuid == null) return null;
+
+        if (uuid.version() == 4) {
+            // This is a local player
+            return uuid;
+        } else {
+            // Ghost players have their UUIDs converted to version 2; convert it back
+            UUID uuidV4 =
+                    new UUID((uuid.getMostSignificantBits() & ~0xF000L) | 0x4000L, uuid.getLeastSignificantBits());
+            return uuidV4;
+        }
+    }
+
+    public WynntilsUser getWynntilsUser(Player player) {
+        return users.getOrDefault(getUserUUID(player), null);
     }
 
     public Stream<String> getAllPlayerNames() {
@@ -115,17 +143,24 @@ public final class PlayerModel extends Model {
         }
         if (event.getNewState() == WorldState.WORLD) {
             clearGhostCache();
+
+            // Lookup self info here as PlayerJoinedWorldEvent will only be posted for self when off world
+            Player player = McUtils.player();
+            if (player == null || player.getUUID() == null) return;
+            loadUser(player.getUUID(), player.getScoreboardName());
         }
     }
 
     @SubscribeEvent
     public void onPlayerJoin(PlayerJoinedWorldEvent event) {
+        if (!Models.WorldState.onWorld()) return;
+
         Player player = event.getPlayer();
         if (player == null || player.getUUID() == null) return;
         StyledText name = StyledText.fromString(player.getGameProfile().getName());
-        if (!isLocalPlayer(player)) return; // avoid player npcs
+        if (isNpc(player) || isDisplayPlayer(player)) return;
 
-        loadUser(player.getUUID(), name.getString());
+        loadUser(Models.Player.getUserUUID(player), name.getString());
     }
 
     @SubscribeEvent
@@ -145,7 +180,7 @@ public final class PlayerModel extends Model {
             return;
         }
 
-        int world = Integer.parseInt(matcher.group(1));
+        int world = Integer.parseInt(matcher.group(2));
         ghosts.put(uuid, world);
     }
 
@@ -172,7 +207,7 @@ public final class PlayerModel extends Model {
                 Services.WynntilsAccount.callApi(UrlId.API_ATHENA_USER_INFO, Map.of("uuid", uuid.toString()));
         apiResponse.handleJsonObject(
                 json -> {
-                    if (json.has("message") && json.get("message").getAsString().equals(ATHENA_USER_NOT_FOUND)) {
+                    if (json.has("error") && json.get("error").getAsString().equals(ATHENA_USER_NOT_FOUND)) {
                         // This user does not exist in our database, stop requesting it
                         usersWithoutWynntilsAccount.add(uuid);
                         fetching.remove(uuid);
@@ -241,8 +276,7 @@ public final class PlayerModel extends Model {
     }
 
     private boolean isNpcName(StyledText name) {
-        // FIXME: Maybe make a better check using more native StyledText operations?
-        return name.contains("\u0001") || name.contains("§");
+        return name.equals("\uE000");
     }
 
     private boolean isNpcUuid(UUID uuid) {

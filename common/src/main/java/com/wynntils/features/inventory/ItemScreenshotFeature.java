@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.inventory;
@@ -17,9 +17,10 @@ import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
-import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.mc.event.ItemTooltipRenderEvent;
+import com.wynntils.mc.extension.MinecraftExtension;
 import com.wynntils.utils.SystemUtils;
 import com.wynntils.utils.mc.McUtils;
 import com.wynntils.utils.render.FontRenderer;
@@ -63,7 +64,7 @@ public class ItemScreenshotFeature extends Feature {
             new KeyBind("Screenshot Item", GLFW.GLFW_KEY_F4, true, null, this::onInventoryPress);
 
     @Persisted
-    public final Config<Boolean> saveToDisk = new Config<>(false);
+    private final Config<Boolean> saveToDisk = new Config<>(false);
 
     private Slot screenshotSlot = null;
 
@@ -77,7 +78,7 @@ public class ItemScreenshotFeature extends Feature {
         if (!Models.WorldState.onWorld()) return;
         if (screenshotSlot == null || !screenshotSlot.hasItem()) return;
 
-        Screen screen = McUtils.mc().screen;
+        Screen screen = McUtils.screen();
         if (!(screen instanceof AbstractContainerScreen<?>)) return;
 
         // has to be called during a render period
@@ -125,8 +126,9 @@ public class ItemScreenshotFeature extends Feature {
         GuiGraphics guiGraphics = new GuiGraphics(McUtils.mc(), bufferSource);
         RenderTarget fb = new MainTarget(width * 2, height * 2);
         fb.setClearColor(1f, 1f, 1f, 0f);
-        fb.createBuffers(width * 2, height * 2, false);
+        fb.createBuffers(width * 2, height * 2);
         fb.bindWrite(false);
+        ((MinecraftExtension) McUtils.mc()).setOverridenRenderTarget(fb);
         guiGraphics.pose().pushPose();
         guiGraphics.pose().scale(scalew, scaleh, 1);
         guiGraphics.renderTooltip(
@@ -138,6 +140,7 @@ public class ItemScreenshotFeature extends Feature {
         guiGraphics.pose().popPose();
         guiGraphics.flush();
         fb.unbindWrite();
+        ((MinecraftExtension) McUtils.mc()).setOverridenRenderTarget(null);
         McUtils.mc().getMainRenderTarget().bindWrite(true);
 
         BufferedImage bi = SystemUtils.createScreenshot(fb);
@@ -153,7 +156,7 @@ public class ItemScreenshotFeature extends Feature {
                     .replaceAll("⬡ ", "") // remove shiny indicator
                     .replaceAll("[/ ]", "_")
                     .getNormalized()
-                    .getString(PartStyle.StyleType.NONE);
+                    .getString(StyleType.NONE);
             File screenshotDir = new File(McUtils.mc().gameDirectory, "screenshots");
             String filename = Util.getFilenameFormattedDateTime() + "-" + itemNameForFile + ".png";
             try {

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.handlers.tooltip.impl.crafted.components;
@@ -28,18 +28,19 @@ public class CraftedConsumableTooltipComponent extends CraftedTooltipComponent<C
 
         // Effects
         if (!craftedItem.getNamedEffects().isEmpty()) {
-            header.add(Component.literal("Effects:").withStyle(ChatFormatting.DARK_RED));
-            craftedItem.getNamedEffects().forEach(effect -> {
-                header.add(Component.literal("- ")
-                        .withStyle(ChatFormatting.DARK_RED)
-                        .append(Component.literal(
-                                        StringUtils.capitalizeFirst(
-                                                        effect.type().name().toLowerCase(Locale.ROOT)) + ": ")
-                                .withStyle(ChatFormatting.GRAY))
-                        .append(Component.literal(String.valueOf(effect.value()))
-                                .withStyle(ChatFormatting.WHITE)
-                                .append(Component.literal(" " + effect.type().getSuffix()))));
-            });
+            header.add(Component.literal("Effect:").withStyle(ChatFormatting.GREEN));
+            craftedItem
+                    .getNamedEffects()
+                    .forEach(effect -> header.add(Component.literal("- ")
+                            .withStyle(ChatFormatting.GREEN)
+                            .append(Component.literal(
+                                            StringUtils.capitalizeFirst(
+                                                            effect.type().name().toLowerCase(Locale.ROOT)) + ": ")
+                                    .withStyle(ChatFormatting.GRAY))
+                            .append(Component.literal(String.valueOf(effect.value()))
+                                    .withStyle(ChatFormatting.WHITE)
+                                    .append(Component.literal(
+                                            " " + effect.type().getSuffix())))));
             header.add(Component.literal(""));
         }
 

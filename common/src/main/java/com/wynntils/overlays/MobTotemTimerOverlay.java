@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays;
@@ -9,16 +9,19 @@ import com.wynntils.core.consumers.overlays.OverlayPosition;
 import com.wynntils.core.consumers.overlays.OverlaySize;
 import com.wynntils.core.consumers.overlays.TextOverlay;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.models.bonustotems.type.BonusTotemType;
 import com.wynntils.utils.mc.RenderedStringUtils;
 import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.VerticalAlignment;
 import java.util.Arrays;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class MobTotemTimerOverlay extends TextOverlay {
     private static final String TEMPLATE =
             "{MOB_TOTEM_OWNER(%d)}'s Mob Totem [{MOB_TOTEM_DISTANCE(%d):0} m] ({MOB_TOTEM_TIME_LEFT(%d)})";
+    private static final Pattern DIGIT_PATTERN = Pattern.compile("%d");
 
     public MobTotemTimerOverlay() {
         super(
@@ -33,8 +36,11 @@ public class MobTotemTimerOverlay extends TextOverlay {
 
     @Override
     public String getTemplate() {
-        return IntStream.rangeClosed(1, Models.MobTotem.getMobTotems().size())
-                .mapToObj(i -> TEMPLATE.replaceAll("%d", String.valueOf(i)))
+        return IntStream.rangeClosed(
+                        1,
+                        Models.BonusTotem.getBonusTotemsByType(BonusTotemType.MOB)
+                                .size())
+                .mapToObj(i -> DIGIT_PATTERN.matcher(TEMPLATE).replaceAll(String.valueOf(i)))
                 .collect(Collectors.joining("\n"));
     }
 

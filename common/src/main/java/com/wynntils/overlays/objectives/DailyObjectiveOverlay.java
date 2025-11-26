@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays.objectives;
@@ -25,16 +25,17 @@ import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.VerticalAlignment;
 import java.util.List;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public class DailyObjectiveOverlay extends ObjectiveOverlayBase {
     @Persisted
-    public final Config<Boolean> disableObjectiveTrackingOnScoreboard = new Config<>(true);
+    private final Config<Boolean> disableObjectiveTrackingOnScoreboard = new Config<>(true);
 
     @Persisted(i18nKey = "feature.wynntils.objectivesOverlay.overlay.objectiveOverlayBase.textColor")
-    public final Config<CustomColor> textColor = new Config<>(CommonColors.GREEN);
+    private final Config<CustomColor> textColor = new Config<>(CommonColors.GREEN);
 
     public DailyObjectiveOverlay() {
         super(
@@ -59,10 +60,16 @@ public class DailyObjectiveOverlay extends ObjectiveOverlayBase {
     }
 
     @Override
-    public void render(PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+    protected boolean isVisible() {
+        return !Models.Objectives.getPersonalObjectives().isEmpty();
+    }
+
+    @Override
+    public void render(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
         List<WynnObjective> objectives = Models.Objectives.getPersonalObjectives();
 
-        if (objectives.isEmpty()) return;
+        PoseStack poseStack = guiGraphics.pose();
 
         final int barHeight = this.enableProgressBar.get() ? 5 : 0;
         final int barWidth = 182;
@@ -133,7 +140,4 @@ public class DailyObjectiveOverlay extends ObjectiveOverlayBase {
             offsetY += renderedHeightWithoutTextHeight + textHeight;
         }
     }
-
-    @Override
-    protected void onConfigUpdate(Config<?> config) {}
 }

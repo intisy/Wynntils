@@ -1,14 +1,15 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.functions;
 
 import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.functions.Function;
+import com.wynntils.core.consumers.functions.arguments.Argument;
 import com.wynntils.core.consumers.functions.arguments.FunctionArguments;
-import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.models.inventory.type.InventoryAccessory;
 import com.wynntils.models.inventory.type.InventoryArmor;
 import com.wynntils.models.items.WynnItem;
@@ -42,7 +43,7 @@ public class InventoryFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("accessory", String.class, null)));
+                    List.of(new Argument<>("accessory", String.class, null)));
         }
     }
 
@@ -64,7 +65,7 @@ public class InventoryFunctions {
             if (inventoryArmor == null) return CappedValue.EMPTY;
 
             Optional<DurableItemProperty> durableItemOpt = Models.Item.asWynnItemProperty(
-                    McUtils.inventory().armor.get(inventoryArmor.getSlot()), DurableItemProperty.class);
+                    McUtils.inventory().armor.get(inventoryArmor.getArmorSlot()), DurableItemProperty.class);
 
             if (durableItemOpt.isEmpty()) return CappedValue.EMPTY;
 
@@ -73,8 +74,7 @@ public class InventoryFunctions {
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
-            return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("armor", String.class, null)));
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("armor", String.class, null)));
         }
     }
 
@@ -88,7 +88,7 @@ public class InventoryFunctions {
     public static class CappedIngredientPouchSlotsFunction extends Function<CappedValue> {
         @Override
         public CappedValue getValue(FunctionArguments arguments) {
-            return Models.Inventory.getIngredientPouchSlots();
+            return Models.IngredientPouch.getIngredientPouchSlots();
         }
     }
 
@@ -115,7 +115,7 @@ public class InventoryFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("zeros", Boolean.class, false)));
+                    List.of(new Argument<>("zeros", Boolean.class, false)));
         }
 
         @Override
@@ -196,7 +196,7 @@ public class InventoryFunctions {
     public static class IngredientPouchOpenSlotsFunction extends Function<Integer> {
         @Override
         public Integer getValue(FunctionArguments arguments) {
-            return Models.Inventory.getIngredientPouchSlots().getRemaining();
+            return Models.IngredientPouch.getIngredientPouchSlots().getRemaining();
         }
 
         @Override
@@ -208,7 +208,7 @@ public class InventoryFunctions {
     public static class IngredientPouchUsedSlotsFunction extends Function<Integer> {
         @Override
         public Integer getValue(FunctionArguments arguments) {
-            return Models.Inventory.getIngredientPouchSlots().current();
+            return Models.IngredientPouch.getIngredientPouchSlots().current();
         }
 
         @Override
@@ -269,7 +269,7 @@ public class InventoryFunctions {
         public String getValue(FunctionArguments arguments) {
             ItemStack itemInHand = InventoryUtils.getItemInHand();
 
-            if (itemInHand == null) {
+            if (itemInHand.isEmpty()) {
                 return "NONE";
             }
 
@@ -294,7 +294,7 @@ public class InventoryFunctions {
             ItemStack itemStack = InventoryUtils.getItemInHand();
             StyledText hoverName = StyledText.fromComponent(itemStack.getHoverName());
             if (!arguments.getArgument("formatted").getBooleanValue()) {
-                return hoverName.getString(PartStyle.StyleType.NONE);
+                return hoverName.getString(StyleType.NONE);
             }
             return hoverName.getString();
         }
@@ -302,12 +302,88 @@ public class InventoryFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.OptionalArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("formatted", Boolean.class, false)));
+                    List.of(new Argument<>("formatted", Boolean.class, false)));
         }
 
         @Override
         protected List<String> getAliases() {
             return List.of("held_item", "held_name");
+        }
+    }
+
+    public static class HeldItemCooldownFunction extends Function<CappedValue> {
+        @Override
+        public CappedValue getValue(FunctionArguments arguments) {
+            return Models.CharacterStats.getItemCooldownTicks(InventoryUtils.getItemInHand());
+        }
+
+        @Override
+        protected List<String> getAliases() {
+            return List.of("held_cooldown", "held_cd");
+        }
+    }
+
+    public static class ItemCountFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            String name = arguments.getArgument("name").getStringValue();
+            return Models.Inventory.getAmountInInventory(name);
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.OptionalArgumentBuilder(List.of(new Argument<>("name", String.class, "")));
+        }
+
+        @Override
+        protected List<String> getAliases() {
+            return List.of("item_amount");
+        }
+    }
+
+    public static class InventoryIngredientsFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            String name = arguments.getArgument("name").getStringValue();
+
+            return Models.Inventory.getIngredientAmountInInventory(name);
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("name", String.class, null)));
+        }
+    }
+
+    public static class IngredientPouchIngredientsFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            String name = arguments.getArgument("name").getStringValue();
+
+            return Models.IngredientPouch.getIngredientAmountInPouch(name);
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("name", String.class, null)));
+        }
+    }
+
+    public static class MaterialCountFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            String name = arguments.getArgument("name").getStringValue();
+            int tier = arguments.getArgument("tier").getIntegerValue();
+            boolean exact = arguments.getArgument("exact").getBooleanValue();
+            return Models.Inventory.getMaterialsAmountInInventory(name, tier, exact);
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(
+                    new Argument<>("name", String.class, null),
+                    new Argument<>("tier", Integer.class, null),
+                    new Argument<>("exact", Boolean.class, null)));
         }
     }
 }

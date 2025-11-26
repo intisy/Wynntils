@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils.mc.type;
@@ -76,6 +76,18 @@ public class Location implements Comparable<Location> {
 
     public boolean equalsIgnoringY(Location other) {
         return this.x() == other.x() && this.z() == other.z();
+    }
+
+    public double distanceToSqr(Position position) {
+        double xDiff = position.x() - this.x;
+        double yDiff = position.y() - this.y;
+        double zDiff = position.z() - this.z;
+
+        return xDiff * xDiff + yDiff * yDiff + zDiff * zDiff;
+    }
+
+    public String asChatCoordinates() {
+        return x + " " + y + " " + z;
     }
 
     @Override

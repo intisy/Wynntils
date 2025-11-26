@@ -1,9 +1,13 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.text;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.wynn.WynnUtils;
 import java.util.ArrayList;
@@ -16,6 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
+import net.minecraft.resources.ResourceLocation;
 
 public final class StyledTextPart {
     private final String text;
@@ -62,6 +67,10 @@ public final class StyledTextPart {
         boolean clickEventPrefix = false;
         // <>
         boolean hoverEventPrefix = false;
+        // {}
+        boolean specialPrefix = false;
+        StringBuilder specialString = new StringBuilder();
+
         String eventIndexString = "";
 
         for (char current : codedString.toCharArray()) {
@@ -80,6 +89,10 @@ public final class StyledTextPart {
                     }
                 }
 
+                if (current == '{') {
+                    specialPrefix = true;
+                    continue;
+                }
                 // It looks like we have a hex color code
                 if (current == '#') {
                     hexColorFormatting.append(current);
@@ -112,15 +125,55 @@ public final class StyledTextPart {
                     currentString = new StringBuilder();
                 }
 
-                // Color formatting resets the style
+                // Color formatting resets the style besides the font
                 if (formatting.isColor()) {
-                    currentStyle = Style.EMPTY.withColor(formatting);
+                    currentStyle = Style.EMPTY.withColor(formatting).withFont(currentStyle.getFont());
+                } else {
+                    currentStyle = currentStyle.applyFormat(formatting);
+                }
+                continue;
+            }
+
+            if (specialPrefix) {
+                if (current != '}') {
+                    // Keep appending until we find the closing bracket
+                    specialString.append(current);
+                    continue;
+                } else {
+                    // We currently do not have any special formatting
+                    // But this is a placeholder for future features
+                    specialPrefix = false;
+                    String special = specialString.toString();
+                    specialString = new StringBuilder();
+                    if (special.startsWith("f:")) {
+                        // If we already had some text with the current style
+                        // Append it before modifying the style
+                        if (!currentString.isEmpty()) {
+                            if (style != Style.EMPTY) {
+                                // We might have lost an event, so we need to add it back
+                                currentStyle = currentStyle
+                                        .withClickEvent(style.getClickEvent())
+                                        .withHoverEvent(style.getHoverEvent());
+                            }
+                            // But if the style is empty, we might have parsed events from the string itself
+
+                            parts.add(new StyledTextPart(currentString.toString(), currentStyle, null, parentStyle));
+
+                            // reset string
+                            // style is not reset, because we want to keep the formatting
+                            currentString = new StringBuilder();
+                        }
+
+                        String fontCode = special.substring(2);
+                        ResourceLocation font = FontLookup.getFontFromFromFontCode(fontCode);
+                        if (font != null) {
+                            currentStyle = currentStyle.withFont(font);
+                        }
+                    } else {
+                        // Unknown special code, just ignore it for now
+                    }
                     continue;
                 }
-
-                currentStyle = currentStyle.applyFormat(formatting);
-
-                continue;
             }
 
             // If we are parsing an event, handle it
@@ -250,7 +303,62 @@ public final class StyledTextPart {
         return parts;
     }
 
-    public String getString(PartStyle previousStyle, PartStyle.StyleType type) {
+    // This will convert our JSON format that we use for parsed HTML from the API
+    // Parser located at https://github.com/Wynntils/Static-Storage/blob/main/Utils/html_parser.py
+    static List<StyledTextPart> fromJson(JsonArray jsonArray) {
+        if (jsonArray.isEmpty()) {
+            return List.of(new StyledTextPart("", Style.EMPTY, null, Style.EMPTY));
+        }
+
+        List<StyledTextPart> parts = new ArrayList<>();
+
+        for (JsonElement element : jsonArray) {
+            if (element.isJsonObject()) {
+                Style style = Style.EMPTY;
+                JsonObject jsonObject = element.getAsJsonObject();
+                String text = jsonObject.get("text").getAsString();
+
+                if (jsonObject.has("bold")) {
+                    style = style.withBold(true);
+                }
+                if (jsonObject.has("italic")) {
+                    style = style.withItalic(true);
+                }
+                if (jsonObject.has("underline")) {
+                    style = style.withUnderlined(true);
+                }
+                if (jsonObject.has("strikethrough")) {
+                    style = style.withStrikethrough(true);
+                }
+                if (jsonObject.has("font")) {
+                    style = style.withFont(ResourceLocation.withDefaultNamespace(
+                            jsonObject.get("font").getAsString()));
+                }
+                if (jsonObject.has("color")) {
+                    style = style.withColor(
+                            CustomColor.fromHexString(jsonObject.get("color").getAsString())
+                                    .asInt());
+                }
+                if (jsonObject.has("margin-left")) {
+                    String marginType = jsonObject.get("margin-left").getAsString();
+
+                    if (marginType.equals("thin")) {
+                        // FIXME: Currently a guess, there are no items with this margin but it is
+                        // a possible value according to the docs
+                        text = "À" + text;
+                    } else if (marginType.equals("large")) {
+                        text = "ÀÀÀÀ" + text;
+                    }
+                }
+
+                parts.add(new StyledTextPart(text, style, null, Style.EMPTY));
+            }
+        }
+
+        return parts;
+    }
+
+    public String getString(PartStyle previousStyle, StyleType type) {
         return style.asString(previousStyle, type) + text;
     }
 

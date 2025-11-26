@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.ui;
@@ -11,22 +11,28 @@ import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
-import com.wynntils.core.persisted.storage.Storage;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.handlers.wrappedscreen.event.WrappedScreenOpenEvent;
+import com.wynntils.mc.event.ArmSwingEvent;
 import com.wynntils.mc.event.PlayerInteractEvent;
 import com.wynntils.mc.event.UseItemEvent;
-import com.wynntils.screens.activities.WynntilsCaveScreen;
-import com.wynntils.screens.activities.WynntilsDiscoveriesScreen;
-import com.wynntils.screens.activities.WynntilsQuestBookScreen;
+import com.wynntils.screens.activities.WynntilsContentBookScreen;
 import com.wynntils.screens.base.WynntilsMenuScreenBase;
 import com.wynntils.screens.guides.WynntilsGuidesListScreen;
+import com.wynntils.screens.guides.aspect.WynntilsAspectGuideScreen;
+import com.wynntils.screens.guides.charm.WynntilsCharmGuideScreen;
 import com.wynntils.screens.guides.emeraldpouch.WynntilsEmeraldPouchGuideScreen;
 import com.wynntils.screens.guides.gear.WynntilsItemGuideScreen;
 import com.wynntils.screens.guides.ingredient.WynntilsIngredientGuideScreen;
 import com.wynntils.screens.guides.powder.WynntilsPowderGuideScreen;
+import com.wynntils.screens.guides.tome.WynntilsTomeGuideScreen;
+import com.wynntils.screens.overlays.placement.OverlayManagementScreen;
+import com.wynntils.screens.overlays.selection.OverlaySelectionScreen;
 import com.wynntils.screens.wynntilsmenu.WynntilsMenuScreen;
 import com.wynntils.utils.mc.McUtils;
-import net.minecraft.core.component.DataComponents;
+import com.wynntils.utils.type.ShiftBehavior;
+import com.wynntils.utils.wynn.ContainerUtils;
+import com.wynntils.utils.wynn.InventoryUtils;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.ICancellableEvent;
@@ -36,15 +42,13 @@ import org.lwjgl.glfw.GLFW;
 @ConfigCategory(Category.UI)
 public class WynntilsContentBookFeature extends Feature {
     private static final StyledText CONTENT_BOOK_NAME = StyledText.fromString("§dContent Book");
-    private static final int TUTORIAL_HIGHLIGHT_SLOT = 8;
-    private static final int TUTORIAL_CUSTOM_MODEL_DATA_VALUE = 307;
 
     @RegisterKeyBind
     private final KeyBind openQuestBook = new KeyBind(
             "Open Quest Book",
             GLFW.GLFW_KEY_K,
             true,
-            () -> WynntilsMenuScreenBase.openBook(WynntilsQuestBookScreen.create()));
+            () -> ContainerUtils.openInventory(InventoryUtils.CONTENT_BOOK_SLOT_NUM));
 
     @RegisterKeyBind
     private final KeyBind openWynntilsMenu = new KeyBind(
@@ -52,6 +56,16 @@ public class WynntilsContentBookFeature extends Feature {
             GLFW.GLFW_KEY_I,
             true,
             () -> WynntilsMenuScreenBase.openBook(WynntilsMenuScreen.create()));
+
+    @RegisterKeyBind
+    private final KeyBind openOverlayMenu =
+            new KeyBind("Open Overlay Menu", GLFW.GLFW_KEY_UNKNOWN, true, () -> McUtils.mc()
+                    .setScreen(OverlaySelectionScreen.create()));
+
+    @RegisterKeyBind
+    private final KeyBind openOverlayFreeMove =
+            new KeyBind("Open Overlay Free Move", GLFW.GLFW_KEY_UNKNOWN, true, () -> McUtils.mc()
+                    .setScreen(OverlayManagementScreen.create(null)));
 
     @RegisterKeyBind
     private final KeyBind openPowderGuide = new KeyBind(
@@ -75,6 +89,27 @@ public class WynntilsContentBookFeature extends Feature {
             () -> WynntilsMenuScreenBase.openBook(WynntilsIngredientGuideScreen.create()));
 
     @RegisterKeyBind
+    private final KeyBind openCharmGuide = new KeyBind(
+            "Open Charm Guide",
+            GLFW.GLFW_KEY_UNKNOWN,
+            true,
+            () -> WynntilsMenuScreenBase.openBook(WynntilsCharmGuideScreen.create()));
+
+    @RegisterKeyBind
+    private final KeyBind openTomeGuide = new KeyBind(
+            "Open Tome Guide",
+            GLFW.GLFW_KEY_UNKNOWN,
+            true,
+            () -> WynntilsMenuScreenBase.openBook(WynntilsTomeGuideScreen.create()));
+
+    @RegisterKeyBind
+    private final KeyBind openAspectGuide = new KeyBind(
+            "Open Aspect Guide",
+            GLFW.GLFW_KEY_UNKNOWN,
+            true,
+            () -> WynntilsMenuScreenBase.openBook(WynntilsAspectGuideScreen.create()));
+
+    @RegisterKeyBind
     private final KeyBind openEmeraldPouchGuide = new KeyBind(
             "Open Emerald Pouch Guide",
             GLFW.GLFW_KEY_UNKNOWN,
@@ -89,102 +124,72 @@ public class WynntilsContentBookFeature extends Feature {
             () -> WynntilsMenuScreenBase.openBook(WynntilsGuidesListScreen.create()));
 
     @Persisted
-    public final Config<Boolean> replaceWynncraftContentBook = new Config<>(true);
+    private final Config<ShiftBehavior> shiftBehaviorConfig = new Config<>(ShiftBehavior.DISABLED_IF_SHIFT_HELD);
 
     @Persisted
-    public final Config<InitialPage> initialPage = new Config<>(InitialPage.USER_PROFILE);
-
-    @Persisted
-    public final Config<Boolean> showContentBookLoadingUpdates = new Config<>(true);
+    private final Config<Boolean> openWynntilsMenuInstead = new Config<>(false);
 
     @Persisted
     public final Config<Boolean> displayOverallProgress = new Config<>(true);
 
-    @Persisted
-    public final Config<Boolean> cancelAllQueriesOnScreenClose = new Config<>(true);
+    private boolean shiftClickedBookItem = false;
 
-    // WynntilsQuestBookScreen storages
-    @Persisted
-    public final Storage<Boolean> questsSelected = new Storage<>(true);
-
-    @Persisted
-    public final Storage<Boolean> miniQuestsSelected = new Storage<>(false);
-
-    // WynntilsDiscoveriesScreen storages
-    // Note: These are intentionally not more advanced types, like Map<DiscoveryType, Boolean>,
-    // to allow easier changes in the future (when more discovery types are added).
-    // TODO: Change this when storage upfixers are implemented
-    @Persisted
-    public final Storage<Boolean> secretsSelected = new Storage<>(true);
-
-    @Persisted
-    public final Storage<Boolean> undiscoveredSecretsSelected = new Storage<>(false);
-
-    @Persisted
-    public final Storage<Boolean> worldSelected = new Storage<>(true);
-
-    @Persisted
-    public final Storage<Boolean> undiscoveredWorldSelected = new Storage<>(false);
-
-    @Persisted
-    public final Storage<Boolean> territorySelected = new Storage<>(true);
-
-    @Persisted
-    public final Storage<Boolean> undiscoveredTerritorySelected = new Storage<>(false);
+    @SubscribeEvent
+    public void onSwing(ArmSwingEvent event) {
+        handleClick(event);
+    }
 
     @SubscribeEvent
     public void onUseItem(UseItemEvent event) {
-        if (McUtils.player().isShiftKeyDown() || !replaceWynncraftContentBook.get()) return;
-
-        tryCancelQuestBookOpen(event);
+        handleClick(event);
     }
 
     @SubscribeEvent
     public void onUseItemOn(PlayerInteractEvent.RightClickBlock event) {
-        if (McUtils.player().isShiftKeyDown() || !replaceWynncraftContentBook.get()) return;
-
-        tryCancelQuestBookOpen(event);
+        handleClick(event);
     }
 
     @SubscribeEvent
     public void onInteract(PlayerInteractEvent.Interact event) {
-        if (McUtils.player().isShiftKeyDown() || !replaceWynncraftContentBook.get()) return;
-
-        tryCancelQuestBookOpen(event);
+        handleClick(event);
     }
 
-    private void tryCancelQuestBookOpen(ICancellableEvent event) {
-        // Tutorial safeguard, don't replace the content book if the player hasn't completed the tutorial
-        ItemStack contentBookItem = McUtils.inventory().getItem(TUTORIAL_HIGHLIGHT_SLOT);
+    @SubscribeEvent
+    public void onWrappedScreenOpen(WrappedScreenOpenEvent event) {
+        if (event.getWrappedScreenClass() != WynntilsContentBookScreen.class) return;
 
-        if (contentBookItem != null && contentBookItem.getComponents().has(DataComponents.CUSTOM_MODEL_DATA)) {
-            if (contentBookItem
-                            .getComponents()
-                            .get(DataComponents.CUSTOM_MODEL_DATA)
-                            .value()
-                    == TUTORIAL_CUSTOM_MODEL_DATA_VALUE) {
-                return;
+        boolean shouldOpen = false;
+
+        switch (shiftBehaviorConfig.get()) {
+            case NONE -> {
+                shouldOpen = true;
+            }
+            case ENABLED_IF_SHIFT_HELD -> {
+                if (shiftClickedBookItem) {
+                    shouldOpen = true;
+                }
+            }
+            case DISABLED_IF_SHIFT_HELD -> {
+                if (!shiftClickedBookItem) {
+                    shouldOpen = true;
+                }
             }
         }
 
-        ItemStack itemInHand = McUtils.player().getItemInHand(InteractionHand.MAIN_HAND);
-
-        if (StyledText.fromComponent(itemInHand.getHoverName()).equals(CONTENT_BOOK_NAME)) {
-            event.setCanceled(true);
-            WynntilsMenuScreenBase.openBook(
-                    switch (initialPage.get()) {
-                        case USER_PROFILE -> WynntilsMenuScreen.create();
-                        case QUEST_BOOK -> WynntilsQuestBookScreen.create();
-                        case DISCOVERIES -> WynntilsDiscoveriesScreen.create();
-                        case CAVES -> WynntilsCaveScreen.create();
-                    });
+        if (shouldOpen) {
+            event.setOpenScreen(true);
+            shiftClickedBookItem = false;
         }
     }
 
-    private enum InitialPage {
-        USER_PROFILE,
-        QUEST_BOOK,
-        DISCOVERIES,
-        CAVES
+    private void handleClick(ICancellableEvent cancellableEvent) {
+        shiftClickedBookItem = McUtils.player().isShiftKeyDown();
+
+        ItemStack itemInHand = McUtils.player().getItemInHand(InteractionHand.MAIN_HAND);
+        if (openWynntilsMenuInstead.get()
+                && StyledText.fromComponent(itemInHand.getHoverName()).equals(CONTENT_BOOK_NAME)) {
+            cancellableEvent.setCanceled(true);
+            WynntilsMenuScreenBase.openBook(WynntilsMenuScreen.create());
+        }
     }
 }

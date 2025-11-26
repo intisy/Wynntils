@@ -5,9 +5,19 @@
       "wynntils:horse-whistle-2"
     ]
   },
-  "misc.mythic-found": {
+  "misc.cache-found": {
     "sounds": [
-      "wynntils:mythic-found"
+      "wynntils:cache-found"
+    ]
+  },
+  "misc.mythic-found-classic": {
+    "sounds": [
+      "wynntils:mythic-found-classic"
+    ]
+  },
+  "misc.mythic-found-modern": {
+    "sounds": [
+      "wynntils:mythic-found-modern"
     ]
   },
   "ui.book.open": {

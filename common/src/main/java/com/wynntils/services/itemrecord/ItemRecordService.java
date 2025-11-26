@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2024.
+ * Copyright © Wynntils 2024-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.services.itemrecord;
@@ -9,6 +9,7 @@ import com.wynntils.core.components.Service;
 import com.wynntils.core.components.Services;
 import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.storage.Storage;
+import com.wynntils.core.text.StyledText;
 import com.wynntils.models.items.WynnItem;
 import com.wynntils.services.itemrecord.type.SavedItem;
 import com.wynntils.utils.mc.KeyboardUtils;
@@ -31,7 +32,7 @@ public class ItemRecordService extends Service {
     // This is basically a trash can for items that can't be decoded
     // This is useful for a backup in case the item can be decoded in the future (with a new version of the mod)
     @Persisted
-    public final Storage<Set<SavedItem>> faultyItems = new Storage<>(new TreeSet<>());
+    private final Storage<Set<SavedItem>> faultyItems = new Storage<>(new TreeSet<>());
 
     @Persisted
     public final Storage<Set<String>> categories = new Storage<>(new TreeSet<>(List.of(DEFAULT_CATEGORY)));
@@ -48,7 +49,9 @@ public class ItemRecordService extends Service {
 
         // Check if the item is already saved
         if (savedItems.get().contains(itemToSave)) {
-            McUtils.sendMessageToClient(Component.translatable("screens.wynntils.itemSharing.alreadySaved", itemName)
+            McUtils.sendMessageToClient(Component.translatable(
+                            "screens.wynntils.itemSharing.alreadySaved",
+                            StyledText.fromComponent(itemName).getString() + ChatFormatting.RED)
                     .withStyle(ChatFormatting.RED));
             return false;
         }
@@ -57,7 +60,9 @@ public class ItemRecordService extends Service {
 
         Services.ItemRecord.savedItems.touched();
 
-        McUtils.sendMessageToClient(Component.translatable("screens.wynntils.itemSharing.savedToRecord", itemName)
+        McUtils.sendMessageToClient(Component.translatable(
+                        "screens.wynntils.itemSharing.savedToRecord",
+                        StyledText.fromComponent(itemName).getString() + ChatFormatting.GREEN)
                 .withStyle(ChatFormatting.GREEN));
 
         return true;
@@ -66,10 +71,7 @@ public class ItemRecordService extends Service {
     public void moveSelectedItems(List<Pair<String, String>> selectedItems, String category, boolean keepOriginal) {
         for (Pair<String, String> selectedItem : selectedItems) {
             SavedItem savedItem = Services.ItemRecord.getItem(selectedItem.b());
-
-            if (selectedItem != null) {
-                moveItemCategory(savedItem, category, selectedItem.a(), keepOriginal);
-            }
+            moveItemCategory(savedItem, category, selectedItem.a(), keepOriginal);
         }
     }
 

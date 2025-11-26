@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.debug;
@@ -35,7 +35,7 @@ public class AbilityTreeDataDumpFeature extends Feature {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onInventoryClick(ContainerClickEvent event) {
-        if (!(McUtils.mc().screen instanceof AbstractContainerScreen<?> abstractContainerScreen)) return;
+        if (!(McUtils.screen() instanceof AbstractContainerScreen<?> abstractContainerScreen)) return;
         if (!KeyboardUtils.isShiftDown()) return;
 
         Optional<AbilityTreeItem> abilityTreeItem = Models.Item.asWynnItem(event.getItemStack(), AbilityTreeItem.class);
@@ -54,7 +54,7 @@ public class AbilityTreeDataDumpFeature extends Feature {
         // Save the dump to a file
         JsonElement element = Managers.Json.GSON.toJsonTree(abilityTreeInfo);
 
-        String fileName = Models.Character.getClassType().getName().toLowerCase(Locale.ROOT) + "_ablities.json";
+        String fileName = Models.Character.getClassType().getName().toLowerCase(Locale.ROOT) + "_abilities.json";
         File jsonFile = new File(SAVE_FOLDER, fileName);
         Managers.Json.savePreciousJson(jsonFile, element.getAsJsonObject());
 

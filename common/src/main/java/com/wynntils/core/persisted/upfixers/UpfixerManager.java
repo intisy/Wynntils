@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.persisted.upfixers;
@@ -15,19 +15,33 @@ import com.wynntils.core.persisted.upfixers.config.CustomBankQuickJumpsBankNameU
 import com.wynntils.core.persisted.upfixers.config.CustomBankQuickJumpsUpfixer;
 import com.wynntils.core.persisted.upfixers.config.CustomCommandKeybindSlashStartUpfixer;
 import com.wynntils.core.persisted.upfixers.config.CustomPoiIconEnumBugUpfixer;
-import com.wynntils.core.persisted.upfixers.config.CustomPoiVisbilityUpfixer;
+import com.wynntils.core.persisted.upfixers.config.CustomPoiVisibilityUpfixer;
+import com.wynntils.core.persisted.upfixers.config.DurabilityArcToDurabilityOverlayUpfixer;
 import com.wynntils.core.persisted.upfixers.config.EnumNamingUpfixer;
 import com.wynntils.core.persisted.upfixers.config.GameBarOverlayMoveUpfixer;
+import com.wynntils.core.persisted.upfixers.config.HideDamageLabelsToHideLabelsUpfixer;
+import com.wynntils.core.persisted.upfixers.config.ItemHighlightFeatureCosmeticToStoreUpfixer;
 import com.wynntils.core.persisted.upfixers.config.MapToMainMapRenamedConfigsUpfixer;
+import com.wynntils.core.persisted.upfixers.config.MaxItensityToMaxIntensityUpfixer;
+import com.wynntils.core.persisted.upfixers.config.MobTotemTimerOverlayFeatureToBonusTotemTimerOverlayFeature;
+import com.wynntils.core.persisted.upfixers.config.MythicBlockerToChestBlockerUpfixer;
+import com.wynntils.core.persisted.upfixers.config.MythicFoundToValuableFoundUpfixer;
 import com.wynntils.core.persisted.upfixers.config.NpcDialoguesOverlayConfigsMovedUpfixer;
 import com.wynntils.core.persisted.upfixers.config.NpcDialoguesRenamedUpfixer;
 import com.wynntils.core.persisted.upfixers.config.OverlayConfigsIntegrationUpfixer;
 import com.wynntils.core.persisted.upfixers.config.OverlayRestructuringUpfixer;
 import com.wynntils.core.persisted.upfixers.config.ProfessionBadgesToLeaderboardBadgesUpfixer;
 import com.wynntils.core.persisted.upfixers.config.QuestBookToContentRenamedConfigsUpfixer;
+import com.wynntils.core.persisted.upfixers.config.SacredSurgeToHolyPowerUpfixer;
+import com.wynntils.core.persisted.upfixers.config.ShowAdditonalTextAboveToShowAdditionalTextAboveUpfixer;
 import com.wynntils.core.persisted.upfixers.config.TowerAuraVignetteAndOverlayMovedToCommonFeature;
 import com.wynntils.core.persisted.upfixers.config.TowerAuraVignetteNameUpfixer;
+import com.wynntils.core.persisted.upfixers.config.TradeMarketAutoOpenChatToTradeMarketQuickSearchUpfixer;
+import com.wynntils.core.persisted.upfixers.config.UniversalBarOverlayColorToColorTemplateUpfixer;
+import com.wynntils.core.persisted.upfixers.config.WynntilsContentBookReplaceToShiftBehaviourUpfixer;
+import com.wynntils.core.persisted.upfixers.storage.BankPageNameToBankPagePropertyUpfixer;
 import com.wynntils.core.persisted.upfixers.storage.BankToAccountBankUpfixer;
+import com.wynntils.core.persisted.upfixers.storage.UpdateChangelogToModelUpfixer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -43,7 +57,7 @@ public class UpfixerManager extends Manager {
         super(List.of());
 
         // Register config upfixers here, in order of run priority
-        registerConfigUpfixer(new CustomPoiVisbilityUpfixer());
+        registerConfigUpfixer(new CustomPoiVisibilityUpfixer());
         registerConfigUpfixer(new CustomCommandKeybindSlashStartUpfixer());
         registerConfigUpfixer(new GameBarOverlayMoveUpfixer());
         registerConfigUpfixer(new EnumNamingUpfixer());
@@ -60,9 +74,23 @@ public class UpfixerManager extends Manager {
         registerConfigUpfixer(new TowerAuraVignetteAndOverlayMovedToCommonFeature());
         registerConfigUpfixer(new CombatXpGainToXpGainUpfixer());
         registerConfigUpfixer(new ProfessionBadgesToLeaderboardBadgesUpfixer());
+        registerConfigUpfixer(new TradeMarketAutoOpenChatToTradeMarketQuickSearchUpfixer());
+        registerConfigUpfixer(new SacredSurgeToHolyPowerUpfixer());
+        registerConfigUpfixer(new UniversalBarOverlayColorToColorTemplateUpfixer());
+        registerConfigUpfixer(new WynntilsContentBookReplaceToShiftBehaviourUpfixer());
+        registerConfigUpfixer(new DurabilityArcToDurabilityOverlayUpfixer());
+        registerConfigUpfixer(new MobTotemTimerOverlayFeatureToBonusTotemTimerOverlayFeature());
+        registerConfigUpfixer(new ItemHighlightFeatureCosmeticToStoreUpfixer());
+        registerConfigUpfixer(new HideDamageLabelsToHideLabelsUpfixer());
+        registerConfigUpfixer(new MythicFoundToValuableFoundUpfixer());
+        registerConfigUpfixer(new MythicBlockerToChestBlockerUpfixer());
+        registerConfigUpfixer(new MaxItensityToMaxIntensityUpfixer());
+        registerConfigUpfixer(new ShowAdditonalTextAboveToShowAdditionalTextAboveUpfixer());
 
         // Register storage upfixers here, in order of run priority
         registerStorageUpfixer(new BankToAccountBankUpfixer());
+        registerStorageUpfixer(new UpdateChangelogToModelUpfixer());
+        registerStorageUpfixer(new BankPageNameToBankPagePropertyUpfixer());
     }
 
     private void registerConfigUpfixer(Upfixer upfixer) {

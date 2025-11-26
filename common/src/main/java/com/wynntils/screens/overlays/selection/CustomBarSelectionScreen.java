@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2024.
+ * Copyright © Wynntils 2024-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.overlays.selection;
@@ -48,7 +48,7 @@ public final class CustomBarSelectionScreen extends WynntilsScreen {
     private int barTypeIndex = 0;
 
     private CustomBarSelectionScreen(OverlaySelectionScreen previousScreen) {
-        super(Component.translatable("Custom Bar Overlay Selection Screen"));
+        super(Component.translatable("screens.wynntils.customBarSelection.name"));
 
         this.previousScreen = previousScreen;
     }
@@ -105,7 +105,7 @@ public final class CustomBarSelectionScreen extends WynntilsScreen {
         // Draw the custom bar centered in the screen with 50% progress
         BufferedRenderUtils.drawProgressBar(
                 poseStack,
-                guiGraphics.bufferSource(),
+                guiGraphics.bufferSource,
                 availableBars.get(barTypeIndex).a(),
                 barX,
                 barY,
@@ -120,7 +120,7 @@ public final class CustomBarSelectionScreen extends WynntilsScreen {
 
     @Override
     public void onClose() {
-        McUtils.mc().setScreen(previousScreen);
+        McUtils.setScreen(previousScreen);
     }
 
     @Override
@@ -218,15 +218,15 @@ public final class CustomBarSelectionScreen extends WynntilsScreen {
         // Add the new custom bar
         int id = Managers.Overlay.extendOverlayGroup(barGroup);
 
-        Managers.Config.loadConfigOptions(true, false);
+        Managers.Config.reloadConfiguration(false);
         Managers.Config.saveConfig();
-        Managers.Config.reloadConfiguration();
+        Managers.Config.reloadConfiguration(true);
 
         // Repopulate the overlays on selection screen
         previousScreen.populateOverlays();
 
         // Set the new custom bar as selected for easier editing access
-        previousScreen.setSelectedOverlay(barGroup.getOverlays().getLast());
+        previousScreen.selectOverlay(barGroup.getOverlays().getLast());
 
         McUtils.sendMessageToClient(Component.translatable(
                         "screens.wynntils.overlaySelection.createdOverlay",

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.characterstats;
@@ -19,8 +19,10 @@ import com.wynntils.models.characterstats.actionbar.matchers.ManaBarSegmentMatch
 import com.wynntils.models.characterstats.actionbar.matchers.ManaTextSegmentMatcher;
 import com.wynntils.models.characterstats.actionbar.matchers.MeterBarSegmentMatcher;
 import com.wynntils.models.characterstats.actionbar.matchers.MeterEdgeAnimationSegmentMatcher;
-import com.wynntils.models.characterstats.actionbar.matchers.MeterStateAnimationSegmentMatcher;
+import com.wynntils.models.characterstats.actionbar.matchers.MeterTransitionSegmentMatcher;
 import com.wynntils.models.characterstats.actionbar.matchers.PowderSpecialSegmentMatcher;
+import com.wynntils.models.characterstats.actionbar.matchers.ProfessionExperienceSegmentMatcher;
+import com.wynntils.models.characterstats.actionbar.segments.CombatExperienceSegment;
 import com.wynntils.models.characterstats.actionbar.segments.HealthBarSegment;
 import com.wynntils.models.characterstats.actionbar.segments.HealthTextSegment;
 import com.wynntils.models.characterstats.actionbar.segments.LevelSegment;
@@ -28,6 +30,7 @@ import com.wynntils.models.characterstats.actionbar.segments.ManaBarSegment;
 import com.wynntils.models.characterstats.actionbar.segments.ManaTextSegment;
 import com.wynntils.models.characterstats.actionbar.segments.MeterBarSegment;
 import com.wynntils.models.characterstats.actionbar.segments.PowderSpecialSegment;
+import com.wynntils.models.characterstats.actionbar.segments.ProfessionExperienceSegment;
 import com.wynntils.models.characterstats.type.MeterBarInfo;
 import com.wynntils.models.characterstats.type.PowderSpecialInfo;
 import com.wynntils.models.gear.type.GearInfo;
@@ -41,7 +44,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemCooldowns;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public final class CharacterStatsModel extends Model {
@@ -53,20 +59,23 @@ public final class CharacterStatsModel extends Model {
     private CappedValue sprint = CappedValue.EMPTY;
     private PowderSpecialInfo powderSpecialInfo = PowderSpecialInfo.EMPTY;
 
+    private boolean isProfessionExperience = false;
+
     public CharacterStatsModel() {
         super(List.of());
 
-        // Register all segment matchers
+        // Register relevant segment matchers
         Handlers.ActionBar.registerSegment(new HotbarSegmentMatcher());
         Handlers.ActionBar.registerSegment(new MeterBarSegmentMatcher());
         Handlers.ActionBar.registerSegment(new MeterEdgeAnimationSegmentMatcher());
-        Handlers.ActionBar.registerSegment(new MeterStateAnimationSegmentMatcher());
+        Handlers.ActionBar.registerSegment(new MeterTransitionSegmentMatcher());
         Handlers.ActionBar.registerSegment(new LevelSegmentMatcher());
         Handlers.ActionBar.registerSegment(new ManaBarSegmentMatcher());
         Handlers.ActionBar.registerSegment(new HealthBarSegmentMatcher());
         Handlers.ActionBar.registerSegment(new ManaTextSegmentMatcher());
         Handlers.ActionBar.registerSegment(new HealthTextSegmentMatcher());
         Handlers.ActionBar.registerSegment(new PowderSpecialSegmentMatcher());
+        Handlers.ActionBar.registerSegment(new ProfessionExperienceSegmentMatcher());
     }
 
     @SubscribeEvent
@@ -76,11 +85,16 @@ public final class CharacterStatsModel extends Model {
 
     @SubscribeEvent
     public void onActionBarUpdate(ActionBarUpdatedEvent event) {
-        event.runIfPresent(LevelSegment.class, this::updateLevel);
         event.runIfPresent(HealthTextSegment.class, this::updateHealth);
         event.runIfPresent(ManaTextSegment.class, this::updateMana);
         event.runIfPresent(MeterBarSegment.class, this::updateSprint);
         event.runIfPresent(PowderSpecialSegment.class, this::updatePowderSpecial);
+        event.runIfPresent(CombatExperienceSegment.class, this::updateCombatExperience);
+        event.runIfPresent(ProfessionExperienceSegment.class, this::updateProfessionExperience);
+
+        // This segment must be updated last, as it updates the level based on the
+        // the current experience segment, which are updated above.
+        event.runIfPresent(LevelSegment.class, this::updateLevel);
     }
 
     @SubscribeEvent
@@ -101,8 +115,8 @@ public final class CharacterStatsModel extends Model {
                 .isAir()) {
             endY--;
 
-            // stop checking beyond the minimum build height as there will never be any blocks below it
-            if (endY < McUtils.mc().level.getMinBuildHeight()) return -1;
+            // stop checking beyond the minimum y as there will never be any blocks below it
+            if (endY < McUtils.mc().level.getMinY()) return -1;
         }
 
         // add the floor height to the result to account for half-blocks
@@ -113,6 +127,18 @@ public final class CharacterStatsModel extends Model {
                         (int) endY,
                         McUtils.player().blockPosition().getZ()));
         return McUtils.player().position().y - endY;
+    }
+
+    public CappedValue getItemCooldownTicks(ItemStack itemStack) {
+        ItemCooldowns cooldowns = McUtils.player().getCooldowns();
+        ResourceLocation resourceLocation = cooldowns.getCooldownGroup(itemStack);
+        ItemCooldowns.CooldownInstance cooldown = cooldowns.cooldowns.get(resourceLocation);
+        if (cooldown == null || cooldown.startTime >= cooldown.endTime) return CappedValue.EMPTY; // Sanity check
+
+        int remaining = cooldown.endTime - cooldowns.tickCount;
+        if (remaining <= 0) return CappedValue.EMPTY;
+
+        return new CappedValue(remaining, cooldown.endTime - cooldown.startTime);
     }
 
     public List<GearInfo> getWornGear() {
@@ -158,20 +184,24 @@ public final class CharacterStatsModel extends Model {
         return level;
     }
 
-    public CappedValue getHealth() {
-        return health;
+    public Optional<CappedValue> getHealth() {
+        if (health == CappedValue.EMPTY) return Optional.empty();
+        return Optional.of(health);
     }
 
-    public CappedValue getMana() {
-        return mana;
+    public Optional<CappedValue> getMana() {
+        if (mana == CappedValue.EMPTY) return Optional.empty();
+        return Optional.of(mana);
     }
 
-    public CappedValue getSprint() {
-        return sprint;
+    public Optional<CappedValue> getSprint() {
+        if (sprint == CappedValue.EMPTY) return Optional.empty();
+        return Optional.of(sprint);
     }
 
-    public PowderSpecialInfo getPowderSpecialInfo() {
-        return powderSpecialInfo;
+    public Optional<PowderSpecialInfo> getPowderSpecialInfo() {
+        if (powderSpecialInfo == PowderSpecialInfo.EMPTY) return Optional.empty();
+        return Optional.of(powderSpecialInfo);
     }
 
     public void setHideHealth(boolean shouldHide) {
@@ -194,7 +224,18 @@ public final class CharacterStatsModel extends Model {
         }
     }
 
+    public void setHidePowder(boolean shouldHide) {
+        if (shouldHide) {
+            hiddenSegments.add(PowderSpecialSegment.class);
+        } else {
+            hiddenSegments.remove(PowderSpecialSegment.class);
+        }
+    }
+
     private void updateLevel(LevelSegment segment) {
+        // If the profession experience segment is present, the displayed level is relative to the profession,
+        // which we do not want to update here.
+        if (isProfessionExperience) return;
         level = segment.getLevel();
     }
 
@@ -217,5 +258,16 @@ public final class CharacterStatsModel extends Model {
 
     private void updatePowderSpecial(PowderSpecialSegment segment) {
         powderSpecialInfo = segment.getPowderSpecialInfo();
+    }
+
+    private void updateCombatExperience(CombatExperienceSegment combatExperienceSegment) {
+        // Combat experience segments are handled in CombatXpModel, so we do not need to do anything here.
+        isProfessionExperience = false;
+    }
+
+    private void updateProfessionExperience(ProfessionExperienceSegment professionExperienceSegment) {
+        // Profession experience segments are handled in ProfessionModel, from harvesting, as those values are far
+        // more precise than the action bar segments.
+        isProfessionExperience = true;
     }
 }

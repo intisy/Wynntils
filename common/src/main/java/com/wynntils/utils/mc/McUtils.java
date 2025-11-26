@@ -1,15 +1,20 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.utils.mc;
 
 import com.mojang.blaze3d.platform.Window;
 import com.wynntils.core.WynntilsMod;
-import com.wynntils.mc.extension.ChatComponentExtension;
+import com.wynntils.core.components.Handlers;
+import com.wynntils.core.components.Services;
+import com.wynntils.core.text.StyledText;
+import java.io.File;
+import java.util.UUID;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.prediction.PredictiveAction;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
@@ -29,6 +34,20 @@ import net.minecraft.world.inventory.InventoryMenu;
 public final class McUtils {
     public static Minecraft mc() {
         return Minecraft.getInstance();
+    }
+
+    public static UUID getUserProfileUUID() {
+        // If we are running tests, then Minecraft is not available, so return a dummy UUID
+        if (mc() == null) return UUID.fromString("00000000-0000-0000-0000-000000000000");
+
+        return mc().getUser().getProfileId();
+    }
+
+    public static File getGameDirectory() {
+        // If we are running tests, then Minecraft is not available, so return a suitable directory
+        if (mc() == null) return new File("../build/tmp/");
+
+        return mc().gameDirectory;
     }
 
     public static LocalPlayer player() {
@@ -63,8 +82,28 @@ public final class McUtils {
         return window().getGuiScale();
     }
 
+    public static Screen screen() {
+        return mc().screen;
+    }
+
+    public static void setScreen(Screen screen) {
+        mc().setScreen(screen);
+    }
+
     public static void playSoundUI(SoundEvent sound) {
         mc().getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.0F));
+    }
+
+    public static void playSoundUI(SoundEvent sound, float volume) {
+        mc().getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.0F, volume));
+    }
+
+    public static void playSoundMaster(SoundEvent sound) {
+        playSoundMaster(sound, 1.0F, 1.0F);
+    }
+
+    public static void playSoundMaster(SoundEvent sound, float volume, float pitch) {
+        playSound(sound, SoundSource.MASTER, volume, pitch);
     }
 
     public static void playSoundAmbient(SoundEvent sound) {
@@ -72,12 +111,16 @@ public final class McUtils {
     }
 
     public static void playSoundAmbient(SoundEvent sound, float volume, float pitch) {
+        playSound(sound, SoundSource.AMBIENT, volume, pitch);
+    }
+
+    private static void playSound(SoundEvent sound, SoundSource soundSource, float volume, float pitch) {
         // Pitch and volume are switched in the convenience method for creating this instance,
         // so use the fully qualified method with the correct order
         mc().getSoundManager()
                 .play(new SimpleSoundInstance(
-                        sound.getLocation(),
-                        SoundSource.AMBIENT,
+                        sound.location(),
+                        soundSource,
                         volume,
                         pitch,
                         SoundInstance.createUnseededRandom(),
@@ -91,16 +134,19 @@ public final class McUtils {
     }
 
     public static void sendMessageToClient(Component component) {
-        if (player() == null) {
-            WynntilsMod.error(
-                    "Tried to send message to client: \"" + component.getString() + "\", but player was null.");
-            return;
-        }
-        player().sendSystemMessage(component);
+        Handlers.Chat.setLocalMessage(true);
+        mc().getChatListener().handleSystemMessage(component, false);
+        Handlers.Chat.setLocalMessage(false);
+    }
+
+    public static void sendMessageToClientWithPillHeader(Component component) {
+        sendMessageToClient(ComponentUtils.addWynntilsPillHeader(component));
     }
 
     public static void removeMessageFromChat(Component component) {
-        ((ChatComponentExtension) mc().gui.getChat()).deleteMessage(component);
+        StyledText comparison = StyledText.fromComponent(component);
+        Services.ChatTab.modifyChatHistory(allMessages -> allMessages.removeIf(
+                guiMessage -> StyledText.fromComponent(guiMessage.content()).equals(comparison)));
     }
 
     public static void sendErrorToClient(String errorMsg) {
@@ -129,5 +175,9 @@ public final class McUtils {
      */
     public static void sendChat(String message) {
         mc().getConnection().sendChat(message);
+    }
+
+    public static void openChatScreen(String keybindCommand) {
+        mc().openChatScreen(keybindCommand);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.maps;
@@ -66,7 +66,7 @@ public final class IconFilterScreen extends WynntilsGridLayoutScreen {
 
     @Override
     public void onClose() {
-        McUtils.mc().setScreen(previousScreen);
+        McUtils.setScreen(previousScreen);
     }
 
     @Override
@@ -213,7 +213,7 @@ public final class IconFilterScreen extends WynntilsGridLayoutScreen {
         previousScreen.setFilteredIcons(icons);
 
         // Only have the buttons active if they will do anything.
-        // Eg. Include all will set all to true, so deactive it if no falses
+        // Eg. Include all will set all to true, so deactivate it if no falses
         includeAllButton.active = icons.containsValue(false);
         excludeAllButton.active = icons.containsValue(true);
 

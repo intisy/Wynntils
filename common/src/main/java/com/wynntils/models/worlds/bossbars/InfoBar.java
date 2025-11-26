@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.worlds.bossbars;
@@ -16,15 +16,15 @@ import java.util.regex.Pattern;
 public class InfoBar extends TrackedBar {
     // Test in InfoBar_TERRITORY_INFO_PATTERN
     private static final Pattern TERRITORY_INFO_PATTERN =
-            Pattern.compile("§[abc](?<territory>[a-zA-Z\\s]+)§[234] \\[(?<tag>[A-Za-z]{3,4})\\]");
+            Pattern.compile("§[abc](?<territory>[a-zA-Z\\s]+)§[234] (?<tag>\uE060\uDAFF\uDFFF.*\uDB00\uDC02)");
 
     // Test in InfoBar_GUILD_INFO_PATTERN
     private static final Pattern GUILD_INFO_PATTERN =
             Pattern.compile("§7Lv\\. (?<level>\\d+)§f - §b(?<guild>[a-zA-Z\\s]+)§f - §7(?<xp>\\d+)% XP");
 
     // Test in InfoBar_BOMB_INFO_PATTERN
-    private static final Pattern BOMB_INFO_PATTERN =
-            Pattern.compile("§3(?:Double )?(?<bomb>.+) from §b(?<user>.+)§7 \\[§f(?<length>\\d+)§7 min\\]");
+    private static final Pattern BOMB_INFO_PATTERN = Pattern.compile(
+            "§#a0c84bff(?:Double )?(?<bomb>.+) from §#ffd750ff(?<user>.+)§#a0c84bff §7\\[§f(?<length>\\d+)(?<unit>m|s)§7\\]");
 
     // Minute info is rounded, half a minute offset is a good compromise
     private static final float BOMB_TIMER_OFFSET = 0.5f;
@@ -40,7 +40,13 @@ public class InfoBar extends TrackedBar {
 
             if (bombType == null) return;
 
-            float length = Integer.parseInt(matcher.group("length")) + BOMB_TIMER_OFFSET;
+            float length = Integer.parseInt(matcher.group("length"));
+            if (matcher.group("unit").equals("m")) {
+                length += BOMB_TIMER_OFFSET;
+            } else {
+                length /= 60f;
+            }
+
             Models.Bomb.addBombInfoFromInfoBar(new BombInfo(
                     matcher.group("user"),
                     bombType,

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2024.
+ * Copyright © Wynntils 2024-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.container.widgets;
@@ -9,6 +9,7 @@ import com.wynntils.core.text.StyledText;
 import com.wynntils.features.inventory.PersonalStorageUtilitiesFeature;
 import com.wynntils.mc.extension.ScreenExtension;
 import com.wynntils.models.containers.containers.personal.PersonalStorageContainer;
+import com.wynntils.models.containers.type.QuickJumpButtonIcon;
 import com.wynntils.screens.base.widgets.TextInputBoxWidget;
 import com.wynntils.utils.colors.CommonColors;
 import com.wynntils.utils.render.FontRenderer;
@@ -31,12 +32,12 @@ public class PersonalStorageUtilitiesWidget extends AbstractWidget {
 
     private final PersonalStorageContainer container;
     private final List<QuickJumpButton> quickJumpButtons = new ArrayList<>();
-    private final PersonalStorageEditNameButton editButton;
+    private final PersonalStorageEditModeButton editButton;
+    private final TextInputBoxWidget editInput;
     private final PersonalStorageUtilitiesFeature feature;
     private final AbstractContainerScreen<?> screen;
 
     private String pageName;
-    private TextInputBoxWidget editInput;
 
     public PersonalStorageUtilitiesWidget(
             int x,
@@ -50,10 +51,21 @@ public class PersonalStorageUtilitiesWidget extends AbstractWidget {
         this.feature = feature;
         this.screen = screen;
 
-        editButton = new PersonalStorageEditNameButton(x + 86, y + 9, 14, 14, this);
+        editButton = new PersonalStorageEditModeButton(x + 86, y + 9, 14, 14, this);
+
+        editInput = new TextInputBoxWidget(
+                getX() + 2,
+                getY() + 10,
+                getWidth() - 18,
+                FontRenderer.getInstance().getFont().lineHeight + 2,
+                null,
+                (ScreenExtension) screen);
+        editInput.setTextBoxInput(
+                Models.Bank.getPageCustomization(Models.Bank.getCurrentPage()).getName());
+        editInput.visible = false;
+        screen.addRenderableWidget(editInput);
 
         updatePageName();
-
         addJumpButtons();
     }
 
@@ -61,7 +73,7 @@ public class PersonalStorageUtilitiesWidget extends AbstractWidget {
     public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         RenderUtils.drawTexturedRect(guiGraphics.pose(), Texture.BANK_PANEL, getX(), getY());
 
-        if (!Models.Bank.isEditingName()) {
+        if (!Models.Bank.isEditingMode()) {
             FontRenderer.getInstance()
                     .renderScrollingText(
                             guiGraphics.pose(),
@@ -77,6 +89,7 @@ public class PersonalStorageUtilitiesWidget extends AbstractWidget {
         }
 
         editButton.render(guiGraphics, mouseX, mouseY, partialTick);
+        editInput.render(guiGraphics, mouseX, mouseY, partialTick);
 
         quickJumpButtons.forEach(button -> button.render(guiGraphics, mouseX, mouseY, partialTick));
     }
@@ -97,37 +110,41 @@ public class PersonalStorageUtilitiesWidget extends AbstractWidget {
     }
 
     public void jumpToPage(int destination) {
+        toggleEditMode(false);
         feature.jumpToDestination(destination);
     }
 
-    public void addEditInput() {
-        if (editInput != null) return;
+    public void toggleEditMode(boolean on) {
+        editInput.visible = on;
+        editInput.setTextBoxInput(
+                Models.Bank.getPageCustomization(Models.Bank.getCurrentPage()).getName());
 
-        editInput = new TextInputBoxWidget(
-                getX() + 2,
-                getY() + 10,
-                getWidth() - 18,
-                FontRenderer.getInstance().getFont().lineHeight + 2,
-                null,
-                (ScreenExtension) screen);
-
-        editInput.setTextBoxInput(Models.Bank.getPageName(Models.Bank.getCurrentPage()));
-        screen.addRenderableWidget(editInput);
-    }
-
-    public void removeEditInput() {
-        if (editInput == null) return;
-
-        screen.removeWidget(editInput);
-        editInput = null;
+        Models.Bank.toggleEditingMode(on);
     }
 
     public void updatePageName() {
-        pageName = Models.Bank.getPageName(Models.Bank.getCurrentPage());
+        pageName =
+                Models.Bank.getPageCustomization(Models.Bank.getCurrentPage()).getName();
+    }
+
+    public void updatePageIcons() {
+        for (int i = 0; i < quickJumpButtons.size(); i++) {
+            var button = quickJumpButtons.get(i);
+            button.setIcon(Models.Bank.getPageCustomization(i + 1).getIcon());
+        }
+    }
+
+    public void saveEditModeChanges() {
+        feature.saveEditModeChanges();
     }
 
     public String getName() {
         return editInput.getTextBoxInput();
+    }
+
+    public QuickJumpButtonIcon getPageIcon(int page) {
+        var button = quickJumpButtons.get(page - 1);
+        return button.getIcon();
     }
 
     private void addJumpButtons() {
@@ -135,7 +152,14 @@ public class PersonalStorageUtilitiesWidget extends AbstractWidget {
         int renderY = getY() + 23;
 
         for (int i = 0; i < container.getFinalPage(); i++) {
-            quickJumpButtons.add(new QuickJumpButton(renderX, renderY, i + 1, this));
+            quickJumpButtons.add(new QuickJumpButton(
+                    renderX,
+                    renderY,
+                    i + 1,
+                    this.feature.getLockedQuickJumpColor(),
+                    this.feature.getSelectedQuickJumpColor(),
+                    Models.Bank.getPageCustomization(i + 1).getIcon(),
+                    this));
 
             renderX += BUTTON_SPACING;
 

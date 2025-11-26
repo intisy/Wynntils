@@ -1,10 +1,9 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.inventory;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.features.Feature;
 import com.wynntils.core.consumers.features.properties.RegisterKeyBind;
@@ -20,13 +19,14 @@ import com.wynntils.mc.event.DropHeldItemEvent;
 import com.wynntils.models.containers.type.FullscreenContainerProperty;
 import com.wynntils.models.items.items.game.MultiHealthPotionItem;
 import com.wynntils.utils.mc.McUtils;
-import com.wynntils.utils.render.RenderUtils;
 import com.wynntils.utils.render.Texture;
+import com.wynntils.utils.render.buffered.BufferedRenderUtils;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ClickType;
@@ -43,16 +43,16 @@ public class ItemLockFeature extends Feature {
             new KeyBind("Lock Slot", GLFW.GLFW_KEY_H, true, null, this::tryChangeLockStateOnHoveredSlot);
 
     @Persisted
-    public final HiddenConfig<Map<String, Set<Integer>>> classSlotLockMap = new HiddenConfig<>(new TreeMap<>());
+    private final HiddenConfig<Map<String, Set<Integer>>> classSlotLockMap = new HiddenConfig<>(new TreeMap<>());
 
     @Persisted
-    public final Config<Boolean> blockAllActionsOnLockedItems = new Config<>(false);
+    private final Config<Boolean> blockAllActionsOnLockedItems = new Config<>(false);
 
     @Persisted
-    public final Config<Boolean> allowClickOnEmeraldPouchInBlockingMode = new Config<>(true);
+    private final Config<Boolean> allowClickOnEmeraldPouchInBlockingMode = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> allowClickOnMultiHealthPotionsInBlockingMode = new Config<>(true);
+    private final Config<Boolean> allowClickOnMultiHealthPotionsInBlockingMode = new Config<>(true);
 
     @SubscribeEvent
     public void onContainerRender(ContainerRenderEvent event) {
@@ -60,6 +60,7 @@ public class ItemLockFeature extends Feature {
 
         // Don't render lock on full screen containers
         if (Models.Container.getCurrentContainer() instanceof FullscreenContainerProperty) return;
+        if (Models.Housing.isInEditMode()) return;
 
         for (Integer slotId : classSlotLockMap.get().getOrDefault(Models.Character.getId(), new TreeSet<>())) {
             Optional<Slot> lockedSlot = abstractContainerScreen.getMenu().slots.stream()
@@ -70,16 +71,17 @@ public class ItemLockFeature extends Feature {
                 continue;
             }
 
-            renderLockedSlot(event.getPoseStack(), abstractContainerScreen, lockedSlot.get());
+            renderLockedSlot(event.getGuiGraphics(), abstractContainerScreen, lockedSlot.get());
         }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onInventoryClickEvent(ContainerClickEvent event) {
         // Don't lock fullscreen container slots
-        if (!(McUtils.mc().screen instanceof AbstractContainerScreen<?> abstractContainerScreen)
+        if (!(McUtils.screen() instanceof AbstractContainerScreen<?> abstractContainerScreen)
                 || Models.Container.getCurrentContainer() instanceof FullscreenContainerProperty) return;
         if (!blockAllActionsOnLockedItems.get() && event.getClickType() != ClickType.THROW) return;
+        if (Models.Housing.isInEditMode()) return;
 
         // We have to match slot.index here, because the event slot number is an index as well
         Optional<Slot> slotOptional = abstractContainerScreen.getMenu().slots.stream()
@@ -121,6 +123,7 @@ public class ItemLockFeature extends Feature {
                 .filter(slot -> slot.getItem() == selected)
                 .findFirst();
         if (heldItemSlot.isEmpty()) return;
+        if (Models.Housing.isInEditMode()) return;
 
         if (classSlotLockMap
                 .get()
@@ -130,9 +133,11 @@ public class ItemLockFeature extends Feature {
         }
     }
 
-    private void renderLockedSlot(PoseStack poseStack, AbstractContainerScreen<?> containerScreen, Slot lockedSlot) {
-        RenderUtils.drawTexturedRect(
-                poseStack,
+    private void renderLockedSlot(
+            GuiGraphics guiGraphics, AbstractContainerScreen<?> containerScreen, Slot lockedSlot) {
+        BufferedRenderUtils.drawTexturedRect(
+                guiGraphics.pose(),
+                guiGraphics.bufferSource,
                 Texture.ITEM_LOCK.resource(),
                 ((containerScreen.leftPos + lockedSlot.x)) + 12,
                 ((containerScreen.topPos + lockedSlot.y)) - 4,

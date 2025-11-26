@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.services.itemfilter;
@@ -10,6 +10,7 @@ import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.storage.Storage;
 import com.wynntils.core.text.StyledText;
 import com.wynntils.models.elements.type.Skill;
+import com.wynntils.models.ingredients.type.IngredientPosition;
 import com.wynntils.models.items.WynnItem;
 import com.wynntils.models.profession.type.ProfessionType;
 import com.wynntils.models.stats.type.StatType;
@@ -21,13 +22,19 @@ import com.wynntils.services.itemfilter.filters.PercentageStatFilter;
 import com.wynntils.services.itemfilter.filters.RangedStatFilters;
 import com.wynntils.services.itemfilter.filters.StringStatFilter;
 import com.wynntils.services.itemfilter.statproviders.ActualStatProvider;
+import com.wynntils.services.itemfilter.statproviders.ChargesModifierStatProvider;
+import com.wynntils.services.itemfilter.statproviders.ClassStatProvider;
 import com.wynntils.services.itemfilter.statproviders.CountedItemStatProvider;
+import com.wynntils.services.itemfilter.statproviders.DurabilityModifierStatProvider;
 import com.wynntils.services.itemfilter.statproviders.DurabilityStatProvider;
+import com.wynntils.services.itemfilter.statproviders.DurationModifierStatProvider;
+import com.wynntils.services.itemfilter.statproviders.DurationStatProvider;
 import com.wynntils.services.itemfilter.statproviders.EmeraldValueStatProvider;
 import com.wynntils.services.itemfilter.statproviders.FavoriteStatProvider;
 import com.wynntils.services.itemfilter.statproviders.GearRestrictionStatProvider;
 import com.wynntils.services.itemfilter.statproviders.GearTypeStatProvider;
 import com.wynntils.services.itemfilter.statproviders.HealthStatProvider;
+import com.wynntils.services.itemfilter.statproviders.IngredientEffectivenessStatProvider;
 import com.wynntils.services.itemfilter.statproviders.ItemTypeStatProvider;
 import com.wynntils.services.itemfilter.statproviders.LevelStatProvider;
 import com.wynntils.services.itemfilter.statproviders.MajorIdStatProvider;
@@ -41,6 +48,7 @@ import com.wynntils.services.itemfilter.statproviders.SkillReqStatProvider;
 import com.wynntils.services.itemfilter.statproviders.SkillStatProvider;
 import com.wynntils.services.itemfilter.statproviders.TargetStatProvider;
 import com.wynntils.services.itemfilter.statproviders.TierStatProvider;
+import com.wynntils.services.itemfilter.statproviders.TomeTypeStatProvider;
 import com.wynntils.services.itemfilter.statproviders.TotalPriceStatProvider;
 import com.wynntils.services.itemfilter.statproviders.TradeAmountStatProvider;
 import com.wynntils.services.itemfilter.statproviders.UsesStatProvider;
@@ -295,6 +303,7 @@ public class ItemFilterService extends Service {
         // Sorted stat providers must be filtered as "any" filters
         filteredList = filteredList.filter(itemStack -> {
             Optional<WynnItem> wynnItemOpt = Models.Item.getWynnItem(itemStack);
+            if (wynnItemOpt.isEmpty()) return false;
 
             WynnItem wynnItem = wynnItemOpt.get();
 
@@ -338,7 +347,7 @@ public class ItemFilterService extends Service {
 
     /**
      * Returns a string representation of the filters and sort order in the given filter map.
-     * The resulting string is not guranateed to be the same as the input string to create the filter map,
+     * The resulting string is not guaranteed to be the same as the input string to create the filter map,
      * but a string generated from this method, passed to {@link #createSearchQuery(String, boolean)} then passed back,
      * is guaranteed to be the same as the previous resulting string.
      *
@@ -376,7 +385,9 @@ public class ItemFilterService extends Service {
                 sortInfos.isEmpty() ? "" : SORT_KEY + ":" + String.join(LIST_SEPARATOR, sortInfoStrings);
 
         String plainTextString = String.join(" ", plainTextTokens);
-        return (plainTextString + " " + filterString + " " + sortInfoString).trim();
+        return (plainTextString + " " + filterString + " " + sortInfoString)
+                .trim()
+                .replace("  ", " ");
     }
 
     /**
@@ -501,17 +512,26 @@ public class ItemFilterService extends Service {
         registerStatProvider(new DurabilityStatProvider());
         registerStatProvider(new TierStatProvider());
         registerStatProvider(new UsesStatProvider());
+        registerStatProvider(new ClassStatProvider());
         registerStatProvider(new GearRestrictionStatProvider());
         registerStatProvider(new MajorIdStatProvider());
         registerStatProvider(new PowderSlotsStatProvider());
         registerStatProvider(new HealthStatProvider());
         registerStatProvider(new TargetStatProvider());
+        registerStatProvider(new TomeTypeStatProvider());
 
         // Profession Stats
         for (ProfessionType type : ProfessionType.values()) {
             registerStatProvider(new ProfessionStatProvider(type));
         }
         registerStatProvider(new QualityTierStatProvider());
+        registerStatProvider(new DurationStatProvider());
+        for (IngredientPosition type : IngredientPosition.values()) {
+            registerStatProvider(new IngredientEffectivenessStatProvider(type));
+        }
+        registerStatProvider(new ChargesModifierStatProvider());
+        registerStatProvider(new DurabilityModifierStatProvider());
+        registerStatProvider(new DurationModifierStatProvider());
 
         // Dynamic Item Stats
         registerStatProvider(new OverallStatProvider());

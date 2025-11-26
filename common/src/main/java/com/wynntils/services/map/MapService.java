@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.services.map;
@@ -10,12 +10,14 @@ import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Managers;
 import com.wynntils.core.components.Service;
 import com.wynntils.core.net.Download;
+import com.wynntils.core.net.DownloadRegistry;
 import com.wynntils.core.net.UrlId;
 import com.wynntils.utils.mc.McUtils;
 import com.wynntils.utils.type.BoundingBox;
 import com.wynntils.utils.type.BoundingCircle;
 import com.wynntils.utils.type.BoundingShape;
 import java.io.IOException;
+import java.io.Reader;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.List;
@@ -26,17 +28,11 @@ public final class MapService extends Service {
 
     public MapService() {
         super(List.of());
-
-        loadData();
     }
 
     @Override
-    public void reloadData() {
-        loadData();
-    }
-
-    private void loadData() {
-        loadMaps();
+    public void registerDownloads(DownloadRegistry registry) {
+        registry.registerDownload(UrlId.DATA_STATIC_MAPS).handleReader(this::handleMaps);
     }
 
     public List<MapTexture> getMapsForBoundingBox(BoundingBox box) {
@@ -58,20 +54,15 @@ public final class MapService extends Service {
         return !getMapsForBoundingCircle(textureBoundingCircle).isEmpty();
     }
 
-    private void loadMaps() {
-        maps.clear();
+    private void handleMaps(Reader reader) {
+        Type type = new TypeToken<List<MapPartProfile>>() {}.getType();
 
-        Download dl = Managers.Net.download(UrlId.DATA_STATIC_MAPS);
-        dl.handleReader(reader -> {
-            Type type = new TypeToken<List<MapPartProfile>>() {}.getType();
+        List<MapPartProfile> mapPartList = WynntilsMod.GSON.fromJson(reader, type);
+        for (MapPartProfile mapPart : mapPartList) {
+            String fileName = mapPart.md5 + ".png";
 
-            List<MapPartProfile> mapPartList = WynntilsMod.GSON.fromJson(reader, type);
-            for (MapPartProfile mapPart : mapPartList) {
-                String fileName = mapPart.md5 + ".png";
-
-                loadMapPart(mapPart, fileName);
-            }
-        });
+            loadMapPart(mapPart, fileName);
+        }
     }
 
     private void loadMapPart(MapPartProfile mapPart, String fileName) {
@@ -90,23 +81,5 @@ public final class MapService extends Service {
                 onError -> WynntilsMod.warn("Error occurred while downloading map image of " + mapPart.name, onError));
     }
 
-    private static final class MapPartProfile {
-        final String name;
-        final String url;
-        final int x1;
-        final int z1;
-        final int x2;
-        final int z2;
-        final String md5;
-
-        private MapPartProfile(String name, String url, int x1, int z1, int x2, int z2, String md5) {
-            this.name = name;
-            this.url = url;
-            this.x1 = x1;
-            this.z1 = z1;
-            this.x2 = x2;
-            this.z2 = z2;
-            this.md5 = md5;
-        }
-    }
+    private record MapPartProfile(String name, String url, int x1, int z1, int x2, int z2, String md5) {}
 }

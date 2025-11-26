@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.map;
@@ -14,10 +14,11 @@ import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.core.persisted.config.HiddenConfig;
+import com.wynntils.mc.event.PlayerAttackEvent;
 import com.wynntils.mc.event.PlayerInteractEvent;
 import com.wynntils.mc.event.ScreenOpenedEvent;
 import com.wynntils.models.containers.containers.reward.LootChestContainer;
-import com.wynntils.models.containers.type.LootChestType;
+import com.wynntils.models.containers.type.LootChestTier;
 import com.wynntils.screens.maps.MainMapScreen;
 import com.wynntils.screens.maps.PoiCreationScreen;
 import com.wynntils.services.map.pois.CustomPoi;
@@ -25,6 +26,7 @@ import com.wynntils.services.mapdata.providers.builtin.WaypointsProvider;
 import com.wynntils.utils.colors.CommonColors;
 import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.mc.McUtils;
+import com.wynntils.utils.mc.type.Location;
 import com.wynntils.utils.mc.type.PoiLocation;
 import com.wynntils.utils.render.type.HealthTexture;
 import com.wynntils.utils.render.type.PointerType;
@@ -91,16 +93,19 @@ public class MainMapFeature extends Feature {
     public final Config<Boolean> centerWhenUnmapped = new Config<>(true);
 
     @Persisted
-    public final Config<Boolean> autoWaypointChests = new Config<>(true);
+    private final Config<Boolean> autoWaypointChests = new Config<>(true);
 
     @Persisted
-    public final Config<LootChestType> minTierForAutoWaypoint = new Config<>(LootChestType.TIER_3);
+    private final Config<LootChestTier> minTierForAutoWaypoint = new Config<>(LootChestTier.TIER_3);
 
     @Persisted
     public final Config<Boolean> renderRemoteFriendPlayers = new Config<>(true);
 
     @Persisted
     public final Config<Boolean> renderRemotePartyPlayers = new Config<>(true);
+
+    @Persisted
+    public final Config<Boolean> renderRemoteGuildPlayers = new Config<>(true);
 
     @Persisted
     public final Config<HealthTexture> remotePlayerHealthTexture = new Config<>(HealthTexture.A);
@@ -123,32 +128,35 @@ public class MainMapFeature extends Feature {
     private void openMainMap() {
         // If the current screen is already the map, and we get this event, this means we are holding the keybind
         // and should signal that we should close when the key is not held anymore.
-        if (McUtils.mc().screen instanceof MainMapScreen mainMapScreen) {
+        if (McUtils.screen() instanceof MainMapScreen mainMapScreen) {
             mainMapScreen.setHoldingMapKey(true);
             return;
         }
 
-        McUtils.mc().setScreen(MainMapScreen.create());
+        McUtils.setScreen(MainMapScreen.create());
     }
 
     private void openWaypointSetup() {
-        PoiLocation location = new PoiLocation(
+        Location location = new Location(
                 McUtils.player().getBlockX(),
                 McUtils.player().getBlockY(),
                 McUtils.player().getBlockZ());
 
-        McUtils.mc().setScreen(PoiCreationScreen.create(null, location));
+        McUtils.setScreen(PoiCreationScreen.create(null, location));
+    }
+
+    @SubscribeEvent
+    public void onLeftClick(PlayerAttackEvent event) {
+        if (!autoWaypointChests.get()) return;
+
+        handleEntity(event.getTarget());
     }
 
     @SubscribeEvent
     public void onRightClick(PlayerInteractEvent.InteractAt event) {
         if (!autoWaypointChests.get()) return;
 
-        Entity entity = event.getEntityHitResult().getEntity();
-        if (entity != null && entity.getType() == EntityType.SLIME) {
-            // We don't actually know if this is a chest, but it's a good enough guess.
-            lastChestPos = entity.blockPosition();
-        }
+        handleEntity(event.getEntityHitResult().getEntity());
     }
 
     @SubscribeEvent
@@ -162,7 +170,7 @@ public class MainMapFeature extends Feature {
             return;
         }
 
-        LootChestType chestType = Models.LootChest.getChestType(event.getScreen());
+        LootChestTier chestType = Models.LootChest.getChestType(event.getScreen());
         if (chestType == null) return;
 
         if (chestType.ordinal() < minTierForAutoWaypoint.get().ordinal()) {
@@ -201,5 +209,12 @@ public class MainMapFeature extends Feature {
     public void updateWaypoints() {
         WaypointsProvider.resetFeatures();
         customPois.get().forEach(WaypointsProvider::registerFeature);
+    }
+
+    private void handleEntity(Entity entity) {
+        if (entity != null && entity.getType() == EntityType.INTERACTION) {
+            // We don't actually know if this is a chest, but it's a good enough guess.
+            lastChestPos = entity.blockPosition();
+        }
     }
 }

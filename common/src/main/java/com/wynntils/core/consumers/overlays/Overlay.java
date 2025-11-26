@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.consumers.overlays;
@@ -7,27 +7,36 @@ package com.wynntils.core.consumers.overlays;
 import com.google.common.base.CaseFormat;
 import com.google.common.collect.ComparisonChain;
 import com.mojang.blaze3d.platform.Window;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.wynntils.core.WynntilsMod;
 import com.wynntils.core.components.Managers;
+import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.features.AbstractConfigurable;
 import com.wynntils.core.mod.type.CrashType;
 import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Config;
-import com.wynntils.core.persisted.config.HiddenConfig;
+import com.wynntils.core.text.StyledText;
+import com.wynntils.models.character.type.VehicleType;
+import com.wynntils.utils.colors.CommonColors;
+import com.wynntils.utils.render.buffered.BufferedFontRenderer;
 import com.wynntils.utils.render.type.HorizontalAlignment;
+import com.wynntils.utils.render.type.TextShadow;
 import com.wynntils.utils.render.type.VerticalAlignment;
+import com.wynntils.utils.type.ErrorOr;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.world.phys.Vec2;
 
 public abstract class Overlay extends AbstractConfigurable implements Comparable<Overlay> {
+    @Persisted(i18nKey = "overlay.wynntils.overlay.enabledTemplate")
+    protected final Config<String> enabledTemplate = new Config<>("");
+
     @Persisted(i18nKey = "overlay.wynntils.overlay.position")
-    protected final HiddenConfig<OverlayPosition> position = new HiddenConfig<>(null);
+    private final Config<OverlayPosition> position = new Config<>(null);
 
     @Persisted(i18nKey = "overlay.wynntils.overlay.size")
-    protected final HiddenConfig<OverlaySize> size = new HiddenConfig<>(null);
+    protected final Config<OverlaySize> size = new Config<>(null);
 
     @Persisted(i18nKey = "overlay.wynntils.overlay.userEnabled")
     protected final Config<Boolean> userEnabled = new Config<>(true);
@@ -38,10 +47,12 @@ public abstract class Overlay extends AbstractConfigurable implements Comparable
     // Example use case: Overlay is aligned to the left in the TopRight section,
     //                   but the user wants to use right text alignment
     @Persisted(i18nKey = "overlay.wynntils.overlay.horizontalAlignmentOverride")
-    protected final HiddenConfig<HorizontalAlignment> horizontalAlignmentOverride = new HiddenConfig<>(null);
+    protected final Config<HorizontalAlignment> horizontalAlignmentOverride = new Config<>(null);
 
     @Persisted(i18nKey = "overlay.wynntils.overlay.verticalAlignmentOverride")
-    protected final HiddenConfig<VerticalAlignment> verticalAlignmentOverride = new HiddenConfig<>(null);
+    protected final Config<VerticalAlignment> verticalAlignmentOverride = new Config<>(null);
+
+    private ErrorOr<Boolean> enabledTemplateCache = null;
 
     protected Overlay(OverlayPosition position, float width, float height) {
         this.position.store(position);
@@ -64,20 +75,93 @@ public abstract class Overlay extends AbstractConfigurable implements Comparable
         this.verticalAlignmentOverride.store(verticalAlignmentOverride);
     }
 
+    /**
+     * Whether the overlay should be hidden when Wynncraft hides gui.
+     */
+    protected boolean hideWhenNoGui() {
+        return true;
+    }
+
+    /**
+     * Whether the overlay should be rendered.
+     */
+    protected boolean isVisible() {
+        return true;
+    }
+
+    protected final boolean isRendered() {
+        // When user provides Enabled Template but there is an error, render it to show the error
+        if (enabledTemplateCache != null && enabledTemplateCache.hasError()) return true;
+
+        // But if there are no errors, render according to the template
+        if (enabledTemplateCache != null && !enabledTemplateCache.hasError()) {
+            return enabledTemplateCache.getValue();
+        }
+
+        // Otherwise render it according to defaults
+        if (!isVisible()) return false;
+        boolean hasGui = Models.WorldState.onWorld() && Models.Character.getVehicle() != VehicleType.DISPLAY;
+        return hasGui || !hideWhenNoGui();
+    }
+
     @Override
     public String getTypeName() {
         return "Overlay";
     }
 
     public abstract void render(
-            PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window);
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window);
 
     public void renderPreview(
-            PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
-        this.render(poseStack, bufferSource, deltaTracker, window);
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        this.render(guiGraphics, bufferSource, deltaTracker, window);
     }
 
-    public void tick() {}
+    protected void renderOrErrorMessage(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        if (this.enabledTemplateCache != null && this.enabledTemplateCache.hasError()) {
+            renderEnabledTemplateErrorMessage(guiGraphics, bufferSource);
+        } else {
+            render(guiGraphics, bufferSource, deltaTracker, window);
+        }
+    }
+
+    private void renderEnabledTemplateErrorMessage(GuiGraphics guiGraphics, MultiBufferSource bufferSource) {
+        StyledText[] errorMessage = {
+            StyledText.fromString(
+                    "§c§l" + I18n.get("overlay.wynntils.overlay.enabledTemplate.error") + " " + getTranslatedName()),
+            StyledText.fromUnformattedString(enabledTemplateCache.getError())
+        };
+        BufferedFontRenderer.getInstance()
+                .renderAlignedTextInBox(
+                        guiGraphics.pose(),
+                        bufferSource,
+                        errorMessage,
+                        getRenderX(),
+                        getRenderX() + getWidth(),
+                        getRenderY(),
+                        getRenderY() + getHeight(),
+                        0,
+                        CommonColors.WHITE,
+                        HorizontalAlignment.CENTER,
+                        VerticalAlignment.MIDDLE,
+                        TextShadow.NORMAL,
+                        1);
+    }
+
+    protected void tick() {}
+
+    protected void updateEnabledCache() {
+        String template = enabledTemplate.get();
+        if (template.isBlank()) {
+            this.enabledTemplateCache = null;
+            return;
+        }
+
+        String formattedTemplate =
+                StyledText.join("", Managers.Function.doFormatLines(template)).getString();
+        this.enabledTemplateCache = Managers.Function.tryGetRawValueOfType(formattedTemplate, Boolean.class);
+    }
 
     @Override
     public final void updateConfigOption(Config<?> config) {
@@ -95,7 +179,9 @@ public abstract class Overlay extends AbstractConfigurable implements Comparable
         callOnConfigUpdate(config);
     }
 
-    protected abstract void onConfigUpdate(Config<?> config);
+    protected void onConfigUpdate(Config<?> config) {
+        // Override this method to handle config updates
+    }
 
     protected void callOnConfigUpdate(Config<?> config) {
         try {
@@ -151,6 +237,10 @@ public abstract class Overlay extends AbstractConfigurable implements Comparable
 
     public final boolean isParentEnabled() {
         return Managers.Overlay.getOverlayParent(this).isEnabled();
+    }
+
+    public final String getParentTranslatedName() {
+        return Managers.Overlay.getOverlayParent(this).getTranslatedName();
     }
 
     public float getWidth() {

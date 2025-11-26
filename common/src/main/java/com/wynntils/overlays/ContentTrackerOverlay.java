@@ -1,11 +1,10 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.overlays;
 
 import com.mojang.blaze3d.platform.Window;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.overlays.Overlay;
 import com.wynntils.core.consumers.overlays.OverlayPosition;
@@ -26,13 +25,14 @@ import com.wynntils.utils.render.type.VerticalAlignment;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.resources.language.I18n;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public class ContentTrackerOverlay extends Overlay {
-    public static final String PREVIEW_TASK =
+    private static final String PREVIEW_TASK =
             """
                     Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer \
                     tempus purus in lacus pulvinar dictum. Quisque suscipit erat \
@@ -40,10 +40,10 @@ public class ContentTrackerOverlay extends Overlay {
                     """;
 
     @Persisted
-    public final Config<Boolean> disableTrackerOnScoreboard = new Config<>(true);
+    private final Config<Boolean> disableTrackerOnScoreboard = new Config<>(true);
 
     @Persisted
-    public final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
 
     private static final List<CustomColor> TEXT_COLORS =
             List.of(CommonColors.GREEN, CommonColors.ORANGE, CommonColors.WHITE);
@@ -86,7 +86,8 @@ public class ContentTrackerOverlay extends Overlay {
     }
 
     @Override
-    public void render(PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+    public void render(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
         if (!Models.Activity.isTracking()) {
             return;
         }
@@ -99,7 +100,7 @@ public class ContentTrackerOverlay extends Overlay {
 
         BufferedFontRenderer.getInstance()
                 .renderTextsWithAlignment(
-                        poseStack,
+                        guiGraphics.pose(),
                         bufferSource,
                         this.getRenderX(),
                         this.getRenderY(),
@@ -112,12 +113,12 @@ public class ContentTrackerOverlay extends Overlay {
 
     @Override
     public void renderPreview(
-            PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
         updateTextRenderSettings(toRenderPreview); // we have to force update every time
 
         BufferedFontRenderer.getInstance()
                 .renderTextsWithAlignment(
-                        poseStack,
+                        guiGraphics.pose(),
                         bufferSource,
                         this.getRenderX(),
                         this.getRenderY(),

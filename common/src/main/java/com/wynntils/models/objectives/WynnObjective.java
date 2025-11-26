@@ -1,11 +1,11 @@
 /*
- * Copyright © Wynntils 2022-2023.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.objectives;
 
-import com.wynntils.core.text.PartStyle;
 import com.wynntils.core.text.StyledText;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.utils.type.CappedValue;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -21,20 +21,28 @@ public final class WynnObjective {
     private long updatedAt;
     private final StyledText original;
     private final boolean isGuildObjective;
+    private final boolean hasEventBonus;
+
+    public static final WynnObjective DEMO_GUILD = new WynnObjective(
+            "Slay Loot Chests", new CappedValue(5, 15), 0, StyledText.fromString("Slay Loot Chests 5/15"), true, false);
 
     private WynnObjective(
-            String goal, CappedValue score, long updatedAt, StyledText original, boolean isGuildObjective) {
+            String goal,
+            CappedValue score,
+            long updatedAt,
+            StyledText original,
+            boolean isGuildObjective,
+            boolean hasEventBonus) {
         this.goal = goal;
         this.score = score;
         this.updatedAt = updatedAt;
         this.original = original;
         this.isGuildObjective = isGuildObjective;
+        this.hasEventBonus = hasEventBonus;
     }
 
-    static WynnObjective parseObjectiveLine(StyledText objectiveLine, boolean isGuildObjective) {
-        String stripped = objectiveLine.getString(PartStyle.StyleType.NONE);
-
-        assert stripped != null;
+    static WynnObjective parseObjectiveLine(StyledText objectiveLine, boolean isGuildObjective, boolean hasEventBonus) {
+        String stripped = objectiveLine.getString(StyleType.NONE);
 
         Matcher matcher = OBJECTIVE_PARSER_PATTERN.matcher(stripped);
         String goal = null;
@@ -53,7 +61,12 @@ public final class WynnObjective {
         }
 
         return new WynnObjective(
-                goal, new CappedValue(score, maxScore), System.currentTimeMillis(), objectiveLine, isGuildObjective);
+                goal,
+                new CappedValue(score, maxScore),
+                System.currentTimeMillis(),
+                objectiveLine,
+                isGuildObjective,
+                hasEventBonus);
     }
 
     @Override
@@ -62,7 +75,7 @@ public final class WynnObjective {
     }
 
     public String asObjectiveString() {
-        return this.getGoal() + ": " + getScore();
+        return (hasEventBonus ? "★ " : "") + this.getGoal() + ": " + getScore();
     }
 
     private void updateTimestamp() {

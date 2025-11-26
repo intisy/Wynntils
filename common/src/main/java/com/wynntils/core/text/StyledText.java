@@ -1,16 +1,18 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.text;
 
 import com.google.common.collect.Iterables;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
+import com.wynntils.core.text.type.StyleType;
 import com.wynntils.utils.MathUtils;
 import com.wynntils.utils.type.IterationDecision;
 import com.wynntils.utils.type.Pair;
@@ -24,6 +26,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -100,6 +103,10 @@ public final class StyledText implements Iterable<StyledTextPart> {
         return fromParts(parts);
     }
 
+    public static StyledText fromJson(JsonArray jsonArray) {
+        return new StyledText(StyledTextPart.fromJson(jsonArray), List.of(), List.of());
+    }
+
     public static StyledText fromString(String codedString) {
         return new StyledText(
                 StyledTextPart.fromCodedString(codedString, Style.EMPTY, null, Style.EMPTY), List.of(), List.of());
@@ -146,7 +153,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
     // We don't want to expose the actual string to the outside world
     // If you need to do an operation with this string, implement it as a method
-    public String getString(PartStyle.StyleType type) {
+    public String getString(StyleType type) {
         StringBuilder builder = new StringBuilder();
 
         PartStyle previousStyle = null;
@@ -162,11 +169,11 @@ public final class StyledText implements Iterable<StyledTextPart> {
      * @return The string representation of this {@link StyledText} with default formatting codes.
      */
     public String getString() {
-        return getString(PartStyle.StyleType.DEFAULT);
+        return getString(StyleType.DEFAULT);
     }
 
     public String getStringWithoutFormatting() {
-        return getString(PartStyle.StyleType.NONE);
+        return getString(StyleType.NONE);
     }
 
     public MutableComponent getComponent() {
@@ -187,7 +194,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
         return parts.stream().mapToInt(StyledTextPart::length).sum();
     }
 
-    public int length(PartStyle.StyleType styleType) {
+    public int length(StyleType styleType) {
         return getString(styleType).length();
     }
 
@@ -241,7 +248,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
      */
     public StyledText stripAlignment() {
         return iterate((part, functionParts) -> {
-            String text = part.getString(null, PartStyle.StyleType.NONE);
+            String text = part.getString(null, StyleType.NONE);
 
             // If the text contains the positive or negative space characters,
             // then we need to strip them, and the following character
@@ -296,74 +303,74 @@ public final class StyledText implements Iterable<StyledTextPart> {
     }
 
     public boolean contains(String codedString) {
-        return contains(codedString, PartStyle.StyleType.DEFAULT);
+        return contains(codedString, StyleType.DEFAULT);
     }
 
     public boolean contains(StyledText styledText) {
-        return contains(styledText.getString(PartStyle.StyleType.DEFAULT), PartStyle.StyleType.DEFAULT);
+        return contains(styledText.getString(StyleType.DEFAULT), StyleType.DEFAULT);
     }
 
-    public boolean contains(String codedString, PartStyle.StyleType styleType) {
+    public boolean contains(String codedString, StyleType styleType) {
         return getString(styleType).contains(codedString);
     }
 
-    public boolean contains(StyledText styledText, PartStyle.StyleType styleType) {
+    public boolean contains(StyledText styledText, StyleType styleType) {
         return contains(styledText.getString(styleType), styleType);
     }
 
     public boolean startsWith(String codedString) {
-        return startsWith(codedString, PartStyle.StyleType.DEFAULT);
+        return startsWith(codedString, StyleType.DEFAULT);
     }
 
     public boolean startsWith(StyledText styledText) {
-        return startsWith(styledText.getString(PartStyle.StyleType.DEFAULT), PartStyle.StyleType.DEFAULT);
+        return startsWith(styledText.getString(StyleType.DEFAULT), StyleType.DEFAULT);
     }
 
-    public boolean startsWith(String codedString, PartStyle.StyleType styleType) {
+    public boolean startsWith(String codedString, StyleType styleType) {
         return getString(styleType).startsWith(codedString);
     }
 
-    public boolean startsWith(StyledText styledText, PartStyle.StyleType styleType) {
+    public boolean startsWith(StyledText styledText, StyleType styleType) {
         return startsWith(styledText.getString(styleType), styleType);
     }
 
     public boolean endsWith(String codedString) {
-        return endsWith(codedString, PartStyle.StyleType.DEFAULT);
+        return endsWith(codedString, StyleType.DEFAULT);
     }
 
     public boolean endsWith(StyledText styledText) {
-        return endsWith(styledText.getString(PartStyle.StyleType.DEFAULT), PartStyle.StyleType.DEFAULT);
+        return endsWith(styledText.getString(StyleType.DEFAULT), StyleType.DEFAULT);
     }
 
-    public boolean endsWith(String codedString, PartStyle.StyleType styleType) {
+    public boolean endsWith(String codedString, StyleType styleType) {
         return getString(styleType).endsWith(codedString);
     }
 
-    public boolean endsWith(StyledText styledText, PartStyle.StyleType styleType) {
+    public boolean endsWith(StyledText styledText, StyleType styleType) {
         return endsWith(styledText.getString(styleType), styleType);
     }
 
     public Matcher getMatcher(Pattern pattern) {
-        return getMatcher(pattern, PartStyle.StyleType.DEFAULT);
+        return getMatcher(pattern, StyleType.DEFAULT);
     }
 
-    public Matcher getMatcher(Pattern pattern, PartStyle.StyleType styleType) {
+    public Matcher getMatcher(Pattern pattern, StyleType styleType) {
         return pattern.matcher(getString(styleType));
     }
 
     public boolean matches(Pattern pattern) {
-        return matches(pattern, PartStyle.StyleType.DEFAULT);
+        return matches(pattern, StyleType.DEFAULT);
     }
 
-    public boolean matches(Pattern pattern, PartStyle.StyleType styleType) {
+    public boolean matches(Pattern pattern, StyleType styleType) {
         return pattern.matcher(getString(styleType)).matches();
     }
 
     public boolean find(Pattern pattern) {
-        return find(pattern, PartStyle.StyleType.DEFAULT);
+        return find(pattern, StyleType.DEFAULT);
     }
 
-    public boolean find(Pattern pattern, PartStyle.StyleType styleType) {
+    public boolean find(Pattern pattern, StyleType styleType) {
         return pattern.matcher(getString(styleType)).find();
     }
 
@@ -397,12 +404,24 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
     /**
      * Splits this {@link StyledText} into multiple {@link StyledText}s at the given index.
-     * <p> Note that {@link PartStyle.StyleType.NONE} is used when splitting.
+     * <p> Note that {@link StyleType.NONE} is used when splitting.
      *
      * @param regex the regex to split at
      * @return the split {@link StyledText}s
      */
     public StyledText[] split(String regex) {
+        return split(regex, false);
+    }
+
+    /**
+     * Splits this {@link StyledText} into multiple {@link StyledText}s at the given index.
+     * <p> Note that {@link StyleType.NONE} is used when splitting.
+     *
+     * @param regex the regex to split at
+     * @param keepTrailingEmpty If true, trailing empty StyledTexts are kept
+     * @return the split {@link StyledText}s
+     */
+    public StyledText[] split(String regex, boolean keepTrailingEmpty) {
         // If this is an empty text, return an array with a single empty text
         if (parts.isEmpty()) {
             return new StyledText[] {StyledText.EMPTY};
@@ -415,10 +434,10 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
         for (int i = 0; i < parts.size(); i++) {
             StyledTextPart part = parts.get(i);
-            String partString = part.getString(null, PartStyle.StyleType.NONE);
+            String partString = part.getString(null, StyleType.NONE);
 
             // Avoid empty parts at the end of the list, but keep them otherwise
-            int maxSplit = i == parts.size() - 1 ? 0 : -1;
+            int maxSplit = !keepTrailingEmpty && i == (parts.size() - 1) ? 0 : -1;
 
             List<String> stringParts =
                     Arrays.stream(pattern.split(partString, maxSplit)).toList();
@@ -457,15 +476,15 @@ public final class StyledText implements Iterable<StyledTextPart> {
     }
 
     public StyledText substring(int beginIndex) {
-        return substring(beginIndex, length(), PartStyle.StyleType.NONE);
+        return substring(beginIndex, length(), StyleType.NONE);
     }
 
-    public StyledText substring(int beginIndex, PartStyle.StyleType styleType) {
+    public StyledText substring(int beginIndex, StyleType styleType) {
         return substring(beginIndex, length(styleType), styleType);
     }
 
     public StyledText substring(int beginIndex, int endIndex) {
-        return substring(beginIndex, endIndex, PartStyle.StyleType.NONE);
+        return substring(beginIndex, endIndex, StyleType.NONE);
     }
 
     /**
@@ -478,7 +497,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
      * @throws IndexOutOfBoundsException if the indexes are out of bounds
      * @throws IllegalArgumentException  if the substring splits a formatting code
      */
-    public StyledText substring(int beginIndex, int endIndex, PartStyle.StyleType styleType) {
+    public StyledText substring(int beginIndex, int endIndex, StyleType styleType) {
         if (endIndex < beginIndex) {
             throw new IndexOutOfBoundsException("endIndex must be greater than beginIndex");
         }
@@ -531,7 +550,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
     }
 
     public StyledText[] partition(int... indexes) {
-        return partition(PartStyle.StyleType.NONE, indexes);
+        return partition(StyleType.NONE, indexes);
     }
 
     /**
@@ -542,7 +561,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
      * @return the split {@link StyledText}s as an array
      * @throws IllegalArgumentException if the indexes are not in ascending order or an index splits a formatting code
      */
-    public StyledText[] partition(PartStyle.StyleType styleType, int... indexes) {
+    public StyledText[] partition(StyleType styleType, int... indexes) {
         if (indexes.length == 0) {
             return new StyledText[] {this};
         }
@@ -567,7 +586,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
     /**
      * Replaces the first occurrence of the given regex with the given replacement.
-     * <p> Note that {@link PartStyle.StyleType.NONE} is used when matching and replacing.
+     * <p> Note that {@link StyleType.NONE} is used when matching and replacing.
      *
      * @param regex       the regex to replace
      * @param replacement the replacement
@@ -579,7 +598,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
     /**
      * Replaces the first occurrence of the given regex with the given replacement.
-     * <p> Note that {@link PartStyle.StyleType.NONE} is used when matching and replacing.
+     * <p> Note that {@link StyleType.NONE} is used when matching and replacing.
      *
      * @param pattern     the pattern to replace
      * @param replacement the replacement
@@ -589,7 +608,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
         List<StyledTextPart> newParts = new ArrayList<>();
 
         for (StyledTextPart part : parts) {
-            String partString = part.getString(null, PartStyle.StyleType.NONE);
+            String partString = part.getString(null, StyleType.NONE);
 
             Matcher matcher = pattern.matcher(partString);
 
@@ -611,7 +630,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
     /**
      * Replaces all occurrences of the given regex with the given replacement.
-     * <p> Note that {@link PartStyle.StyleType.NONE} is used when matching and replacing.
+     * <p> Note that {@link StyleType.NONE} is used when matching and replacing.
      *
      * @param regex       the regex to replace
      * @param replacement the replacement
@@ -623,7 +642,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
     /**
      * Replaces all occurrences of the given regex with the given replacement.
-     * <p> Note that {@link PartStyle.StyleType.NONE} is used when matching and replacing.
+     * <p> Note that {@link StyleType.NONE} is used when matching and replacing.
      *
      * @param pattern     the pattern to replace
      * @param replacement the replacement
@@ -633,7 +652,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
         List<StyledTextPart> newParts = new ArrayList<>();
 
         for (StyledTextPart part : parts) {
-            String partString = part.getString(null, PartStyle.StyleType.NONE);
+            String partString = part.getString(null, StyleType.NONE);
 
             Matcher matcher = pattern.matcher(partString);
 
@@ -701,20 +720,23 @@ public final class StyledText implements Iterable<StyledTextPart> {
         return fromParts(newParts);
     }
 
+    public StyledText map(Function<StyledTextPart, StyledTextPart> function) {
+        return fromParts(parts.stream().map(function).collect(Collectors.toList()));
+    }
+
     public StyledText withoutFormatting() {
         return iterate((part, functionParts) -> {
             functionParts.set(
-                    0,
-                    new StyledTextPart(part.getString(null, PartStyle.StyleType.NONE), Style.EMPTY, null, Style.EMPTY));
+                    0, new StyledTextPart(part.getString(null, StyleType.NONE), Style.EMPTY, null, Style.EMPTY));
             return IterationDecision.CONTINUE;
         });
     }
 
     public boolean equalsString(String string) {
-        return equalsString(string, PartStyle.StyleType.DEFAULT);
+        return equalsString(string, StyleType.DEFAULT);
     }
 
-    public boolean equalsString(String string, PartStyle.StyleType styleType) {
+    public boolean equalsString(String string, StyleType styleType) {
         return getString(styleType).equals(string);
     }
 
@@ -798,7 +820,7 @@ public final class StyledText implements Iterable<StyledTextPart> {
 
     @Override
     public String toString() {
-        return "StyledText{'" + getString(PartStyle.StyleType.INCLUDE_EVENTS) + "'}";
+        return "StyledText{'" + getString(StyleType.COMPLETE) + "'}";
     }
 
     @Override

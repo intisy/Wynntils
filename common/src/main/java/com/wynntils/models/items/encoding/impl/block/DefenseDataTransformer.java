@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.models.items.encoding.impl.block;
@@ -21,14 +21,14 @@ public class DefenseDataTransformer extends DataTransformer<DefenseData> {
     @Override
     protected ErrorOr<UnsignedByte[]> encodeData(ItemTransformingVersion version, DefenseData data) {
         return switch (version) {
-            case VERSION_1 -> encodeDefenseData(data);
+            case VERSION_1, VERSION_2 -> encodeDefenseData(data);
         };
     }
 
     @Override
     public ErrorOr<DefenseData> decodeData(ItemTransformingVersion version, ArrayReader<UnsignedByte> byteReader) {
         return switch (version) {
-            case VERSION_1 -> decodeDefenseData(byteReader);
+            case VERSION_1, VERSION_2 -> decodeDefenseData(byteReader);
         };
     }
 
@@ -43,19 +43,17 @@ public class DefenseDataTransformer extends DataTransformer<DefenseData> {
     }
 
     private ErrorOr<UnsignedByte[]> encodeDefenseData(DefenseData data) {
-        List<UnsignedByte> bytes = new ArrayList<>();
-
         // The first bytes are the health bytes, which are assembled into an integer.
         UnsignedByte[] unsignedBytes = UnsignedByteUtils.encodeVariableSizedInteger(data.health());
-        bytes.addAll(List.of(unsignedBytes));
+        List<UnsignedByte> bytes = new ArrayList<>(List.of(unsignedBytes));
 
         // The next byte is the number of defense stats present on the item.
         bytes.add(UnsignedByte.of((byte) data.defences().size()));
 
         // A defense stat is encoded the following way:
         for (Pair<Element, Integer> defence : data.defences()) {
-            // The first byte is the id of the skill (`ETFWA`).
-            bytes.add(UnsignedByte.of((byte) defence.a().ordinal()));
+            // The first byte is the id of the skill (`ETWFA`).
+            bytes.add(UnsignedByte.of((byte) defence.a().getEncodingId()));
 
             // The next bytes are the defense bytes, which are assembled into an integer.
             unsignedBytes = UnsignedByteUtils.encodeVariableSizedInteger(defence.b());
@@ -75,8 +73,13 @@ public class DefenseDataTransformer extends DataTransformer<DefenseData> {
 
         for (int i = 0; i < defencesCount; i++) {
             // A defense stat is encoded the following way:
-            // The first byte is the id of the skill (`ETFWA`).
-            Element element = Element.values()[byteReader.read().value()];
+            // The first byte is the id of the skill (`ETWFA`).
+            int elementTypeId = byteReader.read().value();
+            Element element = Element.fromEncodingId(elementTypeId);
+
+            if (element == null) { // Sometimes null when users mess with custom encoding
+                return ErrorOr.error("Invalid element encoding: " + elementTypeId);
+            }
 
             // The next bytes are the defense bytes, which are assembled into an integer.
             int defence = (int) UnsignedByteUtils.decodeVariableSizedInteger(byteReader);

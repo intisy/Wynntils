@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.screens.base.widgets;
@@ -19,6 +19,7 @@ import com.wynntils.utils.render.type.TextShadow;
 import com.wynntils.utils.render.type.VerticalAlignment;
 import com.wynntils.utils.type.Pair;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import net.minecraft.client.KeyboardHandler;
 import net.minecraft.client.Minecraft;
@@ -33,6 +34,9 @@ import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 
 public class TextInputBoxWidget extends AbstractWidget {
+    private static final Component DEFAULT_TEXT =
+            Component.translatable("screens.wynntils.textInputWidget.defaultText");
+
     private static final int CURSOR_PADDING = 3;
     private static final int CURSOR_TICK = 350;
 
@@ -94,7 +98,7 @@ public class TextInputBoxWidget extends AbstractWidget {
         String renderedText = renderedTextDetails.a();
         int renderedTextStart = renderedTextDetails.b();
 
-        Pair<Integer, Integer> highlightedVisibleInterval = getRenderedHighlighedInterval(renderedText);
+        Pair<Integer, Integer> highlightedVisibleInterval = getRenderedHighlightedInterval(renderedText);
 
         int startIndex = highlightedVisibleInterval.a();
         int endIndex = highlightedVisibleInterval.b();
@@ -138,49 +142,61 @@ public class TextInputBoxWidget extends AbstractWidget {
         poseStack.translate(this.getX(), this.getY(), 0);
 
         RenderUtils.drawRect(poseStack, CommonColors.BLACK, 0, 0, 0, this.width, this.height);
-        RenderUtils.drawRectBorders(poseStack, CommonColors.GRAY, 0, 0, this.width, this.height, 1, 2);
+        RenderUtils.drawRectBorders(
+                poseStack,
+                isHovered ? CommonColors.LIGHT_GRAY : CommonColors.GRAY,
+                0,
+                0,
+                this.width,
+                this.height,
+                1,
+                2);
+
+        boolean defaultText = Objects.equals(textBoxInput, "");
 
         FontRenderer.getInstance()
                 .renderAlignedTextInBox(
                         poseStack,
-                        StyledText.fromString(firstPortion),
+                        StyledText.fromString(defaultText ? DEFAULT_TEXT.getString() : firstPortion),
                         textPadding,
                         this.width - lastWidth - highlightedWidth,
                         textPadding,
                         this.height - textPadding,
                         0,
-                        renderColor,
+                        defaultText ? CommonColors.LIGHT_GRAY : renderColor,
                         HorizontalAlignment.LEFT,
                         VerticalAlignment.MIDDLE,
                         TextShadow.NORMAL);
 
-        FontRenderer.getInstance()
-                .renderAlignedHighlightedTextInBox(
-                        poseStack,
-                        StyledText.fromString(highlightedPortion),
-                        textPadding + firstWidth,
-                        this.width - lastWidth,
-                        textPadding,
-                        this.height - textPadding,
-                        0,
-                        CommonColors.BLUE,
-                        CommonColors.WHITE,
-                        HorizontalAlignment.LEFT,
-                        VerticalAlignment.MIDDLE);
+        if (!defaultText) {
+            FontRenderer.getInstance()
+                    .renderAlignedHighlightedTextInBox(
+                            poseStack,
+                            StyledText.fromString(highlightedPortion),
+                            textPadding + firstWidth,
+                            this.width - lastWidth,
+                            textPadding,
+                            this.height - textPadding,
+                            0,
+                            CommonColors.BLUE,
+                            CommonColors.WHITE,
+                            HorizontalAlignment.LEFT,
+                            VerticalAlignment.MIDDLE);
 
-        FontRenderer.getInstance()
-                .renderAlignedTextInBox(
-                        poseStack,
-                        StyledText.fromString(lastPortion),
-                        textPadding + firstWidth + highlightedWidth,
-                        this.width,
-                        textPadding,
-                        this.height - textPadding,
-                        0,
-                        renderColor,
-                        HorizontalAlignment.LEFT,
-                        VerticalAlignment.MIDDLE,
-                        TextShadow.NORMAL);
+            FontRenderer.getInstance()
+                    .renderAlignedTextInBox(
+                            poseStack,
+                            StyledText.fromString(lastPortion),
+                            textPadding + firstWidth + highlightedWidth,
+                            this.width,
+                            textPadding,
+                            this.height - textPadding,
+                            0,
+                            renderColor,
+                            HorizontalAlignment.LEFT,
+                            VerticalAlignment.MIDDLE,
+                            TextShadow.NORMAL);
+        }
 
         drawCursor(
                 poseStack,
@@ -190,7 +206,7 @@ public class TextInputBoxWidget extends AbstractWidget {
                 false);
 
         if (isHovered && tooltip != null) {
-            McUtils.mc().screen.setTooltipForNextRenderPass(Lists.transform(tooltip, Component::getVisualOrderText));
+            McUtils.screen().setTooltipForNextRenderPass(Lists.transform(tooltip, Component::getVisualOrderText));
         }
 
         poseStack.popPose();
@@ -241,7 +257,7 @@ public class TextInputBoxWidget extends AbstractWidget {
      * This interval is zero indexed.
      * This does NOT represent the *entire* highlighted portion, just the VISIBLE part!
      */
-    private Pair<Integer, Integer> getRenderedHighlighedInterval(String renderedText) {
+    private Pair<Integer, Integer> getRenderedHighlightedInterval(String renderedText) {
         if (renderedText.isEmpty()) {
             return Pair.of(0, 0);
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.handlers.wrappedscreen;
@@ -20,7 +20,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.neoforged.bus.api.SubscribeEvent;
 
-public class WrappedScreenHandler extends Handler {
+public final class WrappedScreenHandler extends Handler {
     private final Set<WrappedScreenHolder> wrappedScreenHolders = new HashSet<>();
 
     private WrappedScreenHolder<?> currentWrappedScreenHolder;
@@ -28,7 +28,7 @@ public class WrappedScreenHandler extends Handler {
 
     @SubscribeEvent
     public void onMenuOpened(MenuEvent.MenuOpenedEvent.Post event) {
-        if (!(McUtils.mc().screen instanceof AbstractContainerScreen<?> abstractContainerScreen)) return;
+        if (!(McUtils.screen() instanceof AbstractContainerScreen<?> abstractContainerScreen)) return;
 
         StyledText titleStyledText = StyledText.fromComponent(abstractContainerScreen.getTitle());
 
@@ -58,11 +58,11 @@ public class WrappedScreenHandler extends Handler {
                 abstractContainerScreen, McUtils.containerMenu(), McUtils.containerMenu().containerId));
 
         holder.setWrappedScreen(currentWrappedScreen);
-        McUtils.mc().setScreen(currentWrappedScreen);
+        McUtils.setScreen(currentWrappedScreen);
     }
 
     @SubscribeEvent
-    public void onScreenClose(ScreenClosedEvent event) {
+    public void onScreenClose(ScreenClosedEvent.Post event) {
         resetWrappedScreen(true);
     }
 

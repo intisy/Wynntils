@@ -1,51 +1,67 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.tooltips;
 
 import com.wynntils.core.WynntilsMod;
-import com.wynntils.core.components.Handlers;
 import com.wynntils.core.components.Models;
+import com.wynntils.core.components.Services;
 import com.wynntils.core.consumers.features.Feature;
 import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
-import com.wynntils.handlers.tooltip.TooltipBuilder;
 import com.wynntils.handlers.tooltip.type.TooltipIdentificationDecorator;
 import com.wynntils.handlers.tooltip.type.TooltipStyle;
+import com.wynntils.handlers.tooltip.type.TooltipWeightDecorator;
 import com.wynntils.mc.event.ItemTooltipRenderEvent;
+import com.wynntils.models.gear.type.ItemWeightSource;
 import com.wynntils.models.items.WynnItem;
-import com.wynntils.models.items.WynnItemData;
-import com.wynntils.models.items.properties.CraftedItemProperty;
 import com.wynntils.models.items.properties.IdentifiableItemProperty;
 import com.wynntils.models.items.properties.NamedItemProperty;
 import com.wynntils.models.stats.StatCalculator;
 import com.wynntils.models.stats.type.StatActualValue;
 import com.wynntils.models.stats.type.StatListOrdering;
 import com.wynntils.models.stats.type.StatPossibleValues;
-import com.wynntils.utils.mc.ComponentUtils;
+import com.wynntils.models.stats.type.StatType;
+import com.wynntils.models.stats.type.StatUnit;
+import com.wynntils.services.itemweight.type.ItemWeighting;
 import com.wynntils.utils.mc.KeyboardUtils;
 import com.wynntils.utils.mc.McUtils;
+import com.wynntils.utils.mc.TooltipUtils;
 import com.wynntils.utils.type.Pair;
 import com.wynntils.utils.wynn.ColorScaleUtils;
-import java.util.Deque;
+import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
 
 @ConfigCategory(Category.TOOLTIPS)
 public class ItemStatInfoFeature extends Feature {
+    private final Map<IdentificationDecoratorType, TooltipIdentificationDecorator> identificationDecorators = Map.of(
+            IdentificationDecoratorType.PERCENTAGE, new PercentageIdentificationDecorator(),
+            IdentificationDecoratorType.REROLL, new RerollIdentificationDecorator(),
+            IdentificationDecoratorType.RANGE, new RangeIdentificationDecorator(),
+            IdentificationDecoratorType.INNER_ROLL, new InnerRollIdentificationDecorator());
+
+    private final Map<WeightDecoratorType, TooltipWeightDecorator> weightDecorators = Map.of(
+            WeightDecoratorType.OVERALL, new SimpleWeightDecorator(),
+            WeightDecoratorType.FULL_DISTRIBUTION, new FullWeightDecorator(true),
+            WeightDecoratorType.FULL_CONTRIBUTION, new FullWeightDecorator(false));
+
     private final Set<WynnItem> brokenItems = new HashSet<>();
 
     @Persisted
@@ -53,6 +69,12 @@ public class ItemStatInfoFeature extends Feature {
 
     @Persisted
     public final Config<Boolean> colorLerp = new Config<>(true);
+
+    @Persisted
+    private final Config<Boolean> legacyColors = new Config<>(false);
+
+    @Persisted
+    private final Config<ColorThreshold> perfectColorThreshold = new Config<>(ColorThreshold.NINETY_FIVE);
 
     @Persisted
     public final Config<Integer> decimalPlaces = new Config<>(1);
@@ -79,6 +101,9 @@ public class ItemStatInfoFeature extends Feature {
     public final Config<Boolean> identificationDecorations = new Config<>(true);
 
     @Persisted
+    public final Config<ItemWeightSource> itemWeights = new Config<>(ItemWeightSource.NONE);
+
+    @Persisted
     public final Config<Boolean> overallPercentageInName = new Config<>(true);
 
     @Persisted
@@ -87,33 +112,42 @@ public class ItemStatInfoFeature extends Feature {
     @Persisted
     public final Config<Boolean> showMaxValues = new Config<>(true);
 
+    private static final NavigableMap<Float, TextColor> LERP_MAP = new TreeMap<>(Map.of(
+            0f,
+            TextColor.fromLegacyFormat(ChatFormatting.RED),
+            40f,
+            TextColor.fromLegacyFormat(ChatFormatting.GOLD),
+            70f,
+            TextColor.fromLegacyFormat(ChatFormatting.YELLOW),
+            90f,
+            TextColor.fromLegacyFormat(ChatFormatting.GREEN),
+            100f,
+            TextColor.fromLegacyFormat(ChatFormatting.AQUA)));
+
+    private NavigableMap<Float, TextColor> flatMap = createFlatMap();
+
+    @Override
+    protected void onConfigUpdate(Config<?> config) {
+        if (config == legacyColors || config == perfectColorThreshold) {
+            flatMap = createFlatMap();
+        }
+    }
+
     @SubscribeEvent
     public void onTooltipPre(ItemTooltipRenderEvent.Pre event) {
         if (KeyboardUtils.isKeyDown(GLFW.GLFW_KEY_RIGHT_SHIFT)) return;
 
-        Optional<WynnItem> wynnItemOpt = Models.Item.getWynnItem(event.getItemStack());
+        ItemStack itemStack = event.getItemStack();
+        Optional<WynnItem> wynnItemOpt = Models.Item.getWynnItem(itemStack);
         if (wynnItemOpt.isEmpty()) return;
 
         WynnItem wynnItem = wynnItemOpt.get();
         if (brokenItems.contains(wynnItem)) return;
 
         try {
-            List<Component> tooltips = null;
+            List<Component> tooltips = TooltipUtils.getWynnItemTooltip(itemStack, wynnItem);
 
-            Optional<IdentifiableItemProperty> identifiableItemPropertyOpt =
-                    Models.Item.asWynnItemProperty(event.getItemStack(), IdentifiableItemProperty.class);
-            if (identifiableItemPropertyOpt.isPresent()) {
-                tooltips =
-                        getIdentifiableItemTooltip(event.getItemStack(), wynnItem, identifiableItemPropertyOpt.get());
-            }
-
-            Optional<CraftedItemProperty> craftedItemPropertyOpt =
-                    Models.Item.asWynnItemProperty(event.getItemStack(), CraftedItemProperty.class);
-            if (craftedItemPropertyOpt.isPresent()) {
-                tooltips = getCraftedItemTooltip(event.getItemStack(), wynnItem, craftedItemPropertyOpt.get());
-            }
-
-            if (tooltips == null) return;
+            if (tooltips.isEmpty()) return;
             event.setTooltips(tooltips);
         } catch (Exception e) {
             brokenItems.add(wynnItem);
@@ -136,69 +170,40 @@ public class ItemStatInfoFeature extends Feature {
         }
     }
 
-    private List<Component> getIdentifiableItemTooltip(
-            ItemStack itemStack, WynnItem wynnItem, IdentifiableItemProperty itemInfo) {
-        TooltipBuilder builder = wynnItem.getData()
-                .getOrCalculate(
-                        WynnItemData.TOOLTIP_KEY, () -> Handlers.Tooltip.fromParsedItemStack(itemStack, itemInfo));
-        if (builder == null) return null;
+    public NavigableMap<Float, TextColor> getColorMap() {
+        return colorLerp.get() ? LERP_MAP : flatMap;
+    }
 
-        IdentificationDecorator decorator = identificationDecorations.get() ? new IdentificationDecorator() : null;
-        TooltipStyle currentIdentificationStyle = new TooltipStyle(
-                identificationsOrdering.get(),
-                groupIdentifications.get(),
-                showBestValueLastAlways.get(),
-                showStars.get(),
-                false // this only applies to crafted items
-                );
-        LinkedList<Component> tooltips = new LinkedList<>(
-                builder.getTooltipLines(Models.Character.getClassType(), currentIdentificationStyle, decorator));
+    public TooltipIdentificationDecorator getIdentificationDecorator() {
+        return identificationDecorators.get(IdentificationDecoratorType.getCurrentType());
+    }
 
-        // Update name depending on overall percentage; this needs to be done every rendering
-        // for rainbow/defective effects
-        if (overallPercentageInName.get() && itemInfo.hasOverallValue()) {
-            updateItemName(itemInfo, tooltips);
+    public TooltipWeightDecorator getWeightDecorator() {
+        return weightDecorators.get(WeightDecoratorType.getCurrentType());
+    }
+
+    private NavigableMap<Float, TextColor> createFlatMap() {
+        boolean useLegacyColors = legacyColors.get();
+
+        float redThreshold = useLegacyColors ? 30f : 20f;
+        float aquaThreshold = perfectColorThreshold.get().getThreshold();
+
+        NavigableMap<Float, TextColor> map = new TreeMap<>();
+
+        map.put(redThreshold, TextColor.fromLegacyFormat(ChatFormatting.RED));
+
+        if (!useLegacyColors) {
+            map.put(50f, TextColor.fromLegacyFormat(ChatFormatting.GOLD));
         }
-        return tooltips;
+
+        map.put(80f, TextColor.fromLegacyFormat(ChatFormatting.YELLOW));
+        map.put(aquaThreshold, TextColor.fromLegacyFormat(ChatFormatting.GREEN));
+        map.put(Float.MAX_VALUE, TextColor.fromLegacyFormat(ChatFormatting.AQUA));
+
+        return map;
     }
 
-    private List<Component> getCraftedItemTooltip(
-            ItemStack itemStack, WynnItem wynnItem, CraftedItemProperty craftedItemProperty) {
-        TooltipBuilder builder = wynnItem.getData()
-                .getOrCalculate(
-                        WynnItemData.TOOLTIP_KEY,
-                        () -> Handlers.Tooltip.fromParsedItemStack(itemStack, craftedItemProperty));
-        if (builder == null) return null;
-
-        TooltipStyle currentIdentificationStyle = new TooltipStyle(
-                identificationsOrdering.get(),
-                groupIdentifications.get(),
-                false, // irrelevant for crafted items
-                false, // irrelevant for crafted items
-                showMaxValues.get());
-        List<Component> tooltips = new LinkedList<>(
-                builder.getTooltipLines(Models.Character.getClassType(), currentIdentificationStyle, null));
-
-        return tooltips;
-    }
-
-    private void updateItemName(IdentifiableItemProperty itemInfo, Deque<Component> tooltips) {
-        MutableComponent name;
-        if (perfect.get() && itemInfo.isPerfect()) {
-            name = ComponentUtils.makeRainbowStyle("Perfect " + itemInfo.getName());
-        } else if (defective.get() && itemInfo.isDefective()) {
-            name = ComponentUtils.makeObfuscated(
-                    "Defective " + itemInfo.getName(), obfuscationChanceStart.get(), obfuscationChanceEnd.get());
-        } else {
-            name = tooltips.getFirst().copy();
-            name.append(ColorScaleUtils.getPercentageTextComponent(
-                    itemInfo.getOverallPercentage(), colorLerp.get(), decimalPlaces.get()));
-        }
-        tooltips.removeFirst();
-        tooltips.addFirst(name);
-    }
-
-    private class IdentificationDecorator implements TooltipIdentificationDecorator {
+    private abstract static class IdentificationDecorator implements TooltipIdentificationDecorator {
         @Override
         public MutableComponent getSuffix(
                 StatActualValue statActualValue, StatPossibleValues possibleValues, TooltipStyle style) {
@@ -209,45 +214,28 @@ public class ItemStatInfoFeature extends Feature {
                 return Component.literal(" [NEW]").withStyle(ChatFormatting.GOLD);
             }
 
-            if (KeyboardUtils.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT)
-                    && KeyboardUtils.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
-                return getInnerRollSuffix(style, statActualValue, possibleValues);
-            } else if (KeyboardUtils.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT)) {
-                return getRangeSuffix(style, statActualValue, possibleValues);
-            } else if (KeyboardUtils.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
-                return getRerollSuffix(style, statActualValue, possibleValues);
-            } else {
-                return getPercentSuffix(style, statActualValue, possibleValues);
-            }
+            return getRollSuffix(style, statActualValue, possibleValues);
         }
 
-        private MutableComponent getInnerRollSuffix(
-                TooltipStyle style, StatActualValue statActualValue, StatPossibleValues possibleValues) {
-            MutableComponent rangeTextComponent = Component.literal(" <")
-                    .append(Component.literal(statActualValue.internalRoll().low() + "% to "
-                                    + statActualValue.internalRoll().high() + "%")
-                            .withStyle(ChatFormatting.GREEN))
-                    .append(">")
-                    .withStyle(ChatFormatting.DARK_GREEN);
+        protected abstract MutableComponent getRollSuffix(
+                TooltipStyle style, StatActualValue actualValue, StatPossibleValues possibleValues);
+    }
 
-            return rangeTextComponent;
-        }
-
-        private MutableComponent getRangeSuffix(
+    private class PercentageIdentificationDecorator extends IdentificationDecorator {
+        @Override
+        protected MutableComponent getRollSuffix(
                 TooltipStyle style, StatActualValue actualValue, StatPossibleValues possibleValues) {
-            Pair<Integer, Integer> displayRange =
-                    StatCalculator.getDisplayRange(possibleValues, style.showBestValueLastAlways());
+            float percentage = StatCalculator.getPercentage(actualValue, possibleValues);
+            MutableComponent percentageTextComponent = ColorScaleUtils.getPercentageTextComponent(
+                    getColorMap(), percentage, colorLerp.get(), decimalPlaces.get());
 
-            MutableComponent rangeTextComponent = Component.literal(" [")
-                    .append(Component.literal(displayRange.a() + ", " + displayRange.b())
-                            .withStyle(ChatFormatting.GREEN))
-                    .append("]")
-                    .withStyle(ChatFormatting.DARK_GREEN);
-
-            return rangeTextComponent;
+            return percentageTextComponent;
         }
+    }
 
-        private MutableComponent getRerollSuffix(
+    private static class RerollIdentificationDecorator extends IdentificationDecorator {
+        @Override
+        protected MutableComponent getRollSuffix(
                 TooltipStyle style, StatActualValue actualValue, StatPossibleValues possibleValues) {
             MutableComponent rerollChancesComponent = Component.literal(String.format(
                             Locale.ROOT, " \u2605%.2f%%", StatCalculator.getPerfectChance(possibleValues)))
@@ -265,14 +253,169 @@ public class ItemStatInfoFeature extends Feature {
 
             return rerollChancesComponent;
         }
+    }
 
-        private MutableComponent getPercentSuffix(
+    private static class RangeIdentificationDecorator extends IdentificationDecorator {
+        @Override
+        protected MutableComponent getRollSuffix(
                 TooltipStyle style, StatActualValue actualValue, StatPossibleValues possibleValues) {
-            float percentage = StatCalculator.getPercentage(actualValue, possibleValues);
-            MutableComponent percentageTextComponent =
-                    ColorScaleUtils.getPercentageTextComponent(percentage, colorLerp.get(), decimalPlaces.get());
+            Pair<Integer, Integer> displayRange =
+                    StatCalculator.getDisplayRange(possibleValues, style.showBestValueLastAlways());
 
-            return percentageTextComponent;
+            MutableComponent rangeTextComponent = Component.literal(" [")
+                    .append(Component.literal(displayRange.a() + ", " + displayRange.b())
+                            .withStyle(ChatFormatting.GREEN))
+                    .append("]")
+                    .withStyle(ChatFormatting.DARK_GREEN);
+
+            return rangeTextComponent;
+        }
+    }
+
+    private static class InnerRollIdentificationDecorator extends IdentificationDecorator {
+        @Override
+        protected MutableComponent getRollSuffix(
+                TooltipStyle style, StatActualValue actualValue, StatPossibleValues possibleValues) {
+            MutableComponent rangeTextComponent = Component.literal(" <")
+                    .append(Component.literal(actualValue.internalRoll().low() + "% to "
+                                    + actualValue.internalRoll().high() + "%")
+                            .withStyle(ChatFormatting.GREEN))
+                    .append(">")
+                    .withStyle(ChatFormatting.DARK_GREEN);
+
+            return rangeTextComponent;
+        }
+    }
+
+    private abstract static class WeightingDecorator implements TooltipWeightDecorator {
+        @Override
+        public List<MutableComponent> getLines(ItemWeighting weighting, IdentifiableItemProperty<?, ?> itemInfo) {
+            return getWeightLines(weighting, itemInfo);
+        }
+
+        protected abstract List<MutableComponent> getWeightLines(
+                ItemWeighting weighting, IdentifiableItemProperty<?, ?> itemInfo);
+    }
+
+    private class SimpleWeightDecorator extends WeightingDecorator {
+        @Override
+        protected List<MutableComponent> getWeightLines(
+                ItemWeighting weighting, IdentifiableItemProperty<?, ?> itemInfo) {
+            MutableComponent weightingComponent = Component.literal(" - ")
+                    .append(Component.literal(weighting.weightName() + " Scale"))
+                    .withStyle(ChatFormatting.GRAY);
+
+            float percentage = Services.ItemWeight.calculateWeighting(weighting, itemInfo);
+            weightingComponent.append(ColorScaleUtils.getPercentageTextComponent(
+                    getColorMap(), percentage, colorLerp.get(), decimalPlaces.get()));
+
+            return List.of(weightingComponent);
+        }
+    }
+
+    private final class FullWeightDecorator extends WeightingDecorator {
+        private final boolean distribution;
+
+        private FullWeightDecorator(boolean distribution) {
+            this.distribution = distribution;
+        }
+
+        @Override
+        protected List<MutableComponent> getWeightLines(
+                ItemWeighting weighting, IdentifiableItemProperty<?, ?> itemInfo) {
+            List<MutableComponent> lines = new ArrayList<>();
+            MutableComponent weightingComponent = Component.literal(" - ")
+                    .append(Component.literal(weighting.weightName() + " Scale"))
+                    .withStyle(ChatFormatting.GRAY);
+
+            float weightPercentage = Services.ItemWeight.calculateWeighting(weighting, itemInfo);
+            weightingComponent.append(ColorScaleUtils.getPercentageTextComponent(
+                    getColorMap(), weightPercentage, colorLerp.get(), decimalPlaces.get()));
+
+            lines.add(weightingComponent);
+
+            Map<StatType, Pair<Float, Float>> statWeights = Services.ItemWeight.getStatWeights(weighting, itemInfo);
+
+            statWeights.forEach((statType, weight) -> {
+                String displayName = statType.getDisplayName() + " ";
+
+                if (statType.getUnit() == StatUnit.RAW) {
+                    displayName += "Raw ";
+                }
+
+                String weightStr = String.format(Locale.ROOT, "(%.1f%%)", weight.a());
+                float percentage = distribution ? weight.b() : ((weight.a() / 100f) * weight.b());
+
+                lines.add(Component.literal("   - ")
+                        .withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(displayName))
+                        .append(Component.literal(weightStr).withStyle(ChatFormatting.WHITE))
+                        .append(ColorScaleUtils.getPercentageTextComponent(
+                                getColorMap(), percentage, colorLerp.get(), decimalPlaces.get())));
+            });
+            lines.add(Component.empty());
+
+            return lines;
+        }
+    }
+
+    private enum IdentificationDecoratorType {
+        INNER_ROLL(Set.of(GLFW.GLFW_KEY_LEFT_SHIFT, GLFW.GLFW_KEY_LEFT_CONTROL)),
+        REROLL(Set.of(GLFW.GLFW_KEY_LEFT_CONTROL)),
+        RANGE(Set.of(GLFW.GLFW_KEY_LEFT_SHIFT)),
+        PERCENTAGE(Set.of());
+
+        private final Set<Integer> keyCodes;
+
+        IdentificationDecoratorType(Set<Integer> keyCodes) {
+            this.keyCodes = keyCodes;
+        }
+
+        public static IdentificationDecoratorType getCurrentType() {
+            for (IdentificationDecoratorType type : values()) {
+                if (type.keyCodes.stream().allMatch(KeyboardUtils::isKeyDown)) {
+                    return type;
+                }
+            }
+
+            return PERCENTAGE;
+        }
+    }
+
+    private enum WeightDecoratorType {
+        FULL_CONTRIBUTION(Set.of(GLFW.GLFW_KEY_LEFT_SHIFT, GLFW.GLFW_KEY_LEFT_CONTROL)),
+        FULL_DISTRIBUTION(Set.of(GLFW.GLFW_KEY_LEFT_SHIFT)),
+        OVERALL(Set.of());
+
+        private final Set<Integer> keyCodes;
+
+        WeightDecoratorType(Set<Integer> keyCodes) {
+            this.keyCodes = keyCodes;
+        }
+
+        public static WeightDecoratorType getCurrentType() {
+            for (WeightDecoratorType type : values()) {
+                if (type.keyCodes.stream().allMatch(KeyboardUtils::isKeyDown)) {
+                    return type;
+                }
+            }
+
+            return OVERALL;
+        }
+    }
+
+    public enum ColorThreshold {
+        NINETY_FIVE(95f),
+        NINETY_SIX(96f);
+
+        private final float threshold;
+
+        ColorThreshold(float threshold) {
+            this.threshold = threshold;
+        }
+
+        public float getThreshold() {
+            return threshold;
         }
     }
 }

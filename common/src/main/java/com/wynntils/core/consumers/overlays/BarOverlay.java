@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.consumers.overlays;
@@ -7,7 +7,6 @@ package com.wynntils.core.consumers.overlays;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.wynntils.core.components.Managers;
-import com.wynntils.core.components.Models;
 import com.wynntils.core.persisted.Persisted;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.text.StyledText;
@@ -16,25 +15,29 @@ import com.wynntils.utils.colors.CustomColor;
 import com.wynntils.utils.render.Texture;
 import com.wynntils.utils.render.buffered.BufferedFontRenderer;
 import com.wynntils.utils.render.buffered.BufferedRenderUtils;
+import com.wynntils.utils.render.type.HorizontalAlignment;
 import com.wynntils.utils.render.type.TextShadow;
+import com.wynntils.utils.render.type.VerticalAlignment;
 import com.wynntils.utils.type.CappedValue;
 import com.wynntils.utils.type.ErrorOr;
 import com.wynntils.utils.type.Pair;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.resources.language.I18n;
 
 public abstract class BarOverlay extends DynamicOverlay {
     @Persisted(i18nKey = "overlay.wynntils.barOverlay.textShadow")
-    public final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
+    private final Config<TextShadow> textShadow = new Config<>(TextShadow.OUTLINE);
 
     @Persisted(i18nKey = "overlay.wynntils.barOverlay.flip")
-    public final Config<Boolean> flip = new Config<>(false);
+    private final Config<Boolean> flip = new Config<>(false);
 
     @Persisted(i18nKey = "overlay.wynntils.barOverlay.animationTime")
-    public final Config<Float> animationTime = new Config<>(2f);
+    private final Config<Float> animationTime = new Config<>(2f);
 
     @Persisted(i18nKey = "overlay.wynntils.barOverlay.heightModifier")
-    public final Config<Float> heightModifier = new Config<>(1f);
+    private final Config<Float> heightModifier = new Config<>(1f);
 
     private Pair<StyledText, ErrorOr<CappedValue>> templateCache;
 
@@ -51,27 +54,23 @@ public abstract class BarOverlay extends DynamicOverlay {
     }
 
     @Override
-    public void render(PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
-        if (!isRendered()) return;
+    public void render(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        PoseStack poseStack = guiGraphics.pose();
 
         BarOverlayTemplatePair template = getTemplate();
 
         if (templateCache == null) {
             templateCache = calculateTemplate(template);
         }
-
-        ErrorOr<CappedValue> valueOrError = templateCache.value();
-        if (valueOrError.hasError()) {
-            renderText(poseStack, bufferSource, getModifiedRenderY(10), StyledText.fromString(valueOrError.getError()));
-            return;
-        }
-
         render(poseStack, bufferSource, currentProgress, templateCache.key());
     }
 
     @Override
     public void renderPreview(
-            PoseStack poseStack, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        PoseStack poseStack = guiGraphics.pose();
+
         BarOverlayTemplatePair previewTemplate = getPreviewTemplate();
         Pair<StyledText, ErrorOr<CappedValue>> calculatedTemplate = calculateTemplate(previewTemplate);
 
@@ -87,6 +86,37 @@ public abstract class BarOverlay extends DynamicOverlay {
         render(poseStack, bufferSource, (float) valueOrError.getValue().getProgress(), calculatedTemplate.key());
     }
 
+    @Override
+    protected void renderOrErrorMessage(
+            GuiGraphics guiGraphics, MultiBufferSource bufferSource, DeltaTracker deltaTracker, Window window) {
+        if (templateCache == null) return;
+        if (templateCache.b().hasError()) {
+            StyledText[] errorMessage = {
+                StyledText.fromString("§c§l" + I18n.get("overlay.wynntils.barOverlay.valueTemplate.error") + " "
+                        + getTranslatedName()),
+                StyledText.fromUnformattedString(templateCache.b().getError())
+            };
+            BufferedFontRenderer.getInstance()
+                    .renderAlignedTextInBox(
+                            guiGraphics.pose(),
+                            bufferSource,
+                            errorMessage,
+                            getRenderX(),
+                            getRenderX() + getWidth(),
+                            getRenderY(),
+                            getRenderY() + getHeight(),
+                            0,
+                            CommonColors.WHITE,
+                            HorizontalAlignment.CENTER,
+                            VerticalAlignment.MIDDLE,
+                            TextShadow.NORMAL,
+                            1);
+
+        } else {
+            super.renderOrErrorMessage(guiGraphics, bufferSource, deltaTracker, window);
+        }
+    }
+
     private void render(
             PoseStack poseStack, MultiBufferSource bufferSource, float renderedProgress, StyledText textValue) {
         float barHeight = getTextureHeight() * heightModifier.get();
@@ -100,7 +130,7 @@ public abstract class BarOverlay extends DynamicOverlay {
 
     @Override
     public void tick() {
-        if (!Models.WorldState.onWorld() || !isRendered()) return;
+        if (!isRendered()) return;
 
         BarOverlayTemplatePair template = getTemplate();
 
@@ -186,11 +216,6 @@ public abstract class BarOverlay extends DynamicOverlay {
             case BOTTOM -> this.getRenderY() + this.getHeight() - renderedHeight;
         };
     }
-
-    @Override
-    protected void onConfigUpdate(Config<?> config) {}
-
-    protected abstract boolean isRendered();
 
     protected abstract Texture getTexture();
 

@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.features.commands;
@@ -13,46 +13,45 @@ import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.Config;
 import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.utils.mc.McUtils;
-import net.minecraft.client.gui.screens.ChatScreen;
 import org.lwjgl.glfw.GLFW;
 
 @ConfigCategory(Category.COMMANDS)
 public class CustomCommandKeybindsFeature extends Feature {
     @Persisted
-    public final Config<String> keybindCommand1 = new Config<>("");
+    private final Config<String> keybindCommand1 = new Config<>("");
 
     @Persisted
-    public final Config<CommandType> commandType1 = new Config<>(CommandType.EXECUTE);
+    private final Config<CommandType> commandType1 = new Config<>(CommandType.EXECUTE);
 
     @Persisted
-    public final Config<String> keybindCommand2 = new Config<>("");
+    private final Config<String> keybindCommand2 = new Config<>("");
 
     @Persisted
-    public final Config<CommandType> commandType2 = new Config<>(CommandType.EXECUTE);
+    private final Config<CommandType> commandType2 = new Config<>(CommandType.EXECUTE);
 
     @Persisted
-    public final Config<String> keybindCommand3 = new Config<>("");
+    private final Config<String> keybindCommand3 = new Config<>("");
 
     @Persisted
-    public final Config<CommandType> commandType3 = new Config<>(CommandType.EXECUTE);
+    private final Config<CommandType> commandType3 = new Config<>(CommandType.EXECUTE);
 
     @Persisted
-    public final Config<String> keybindCommand4 = new Config<>("");
+    private final Config<String> keybindCommand4 = new Config<>("");
 
     @Persisted
-    public final Config<CommandType> commandType4 = new Config<>(CommandType.EXECUTE);
+    private final Config<CommandType> commandType4 = new Config<>(CommandType.EXECUTE);
 
     @Persisted
-    public final Config<String> keybindCommand5 = new Config<>("");
+    private final Config<String> keybindCommand5 = new Config<>("");
 
     @Persisted
-    public final Config<CommandType> commandType5 = new Config<>(CommandType.EXECUTE);
+    private final Config<CommandType> commandType5 = new Config<>(CommandType.EXECUTE);
 
     @Persisted
-    public final Config<String> keybindCommand6 = new Config<>("");
+    private final Config<String> keybindCommand6 = new Config<>("");
 
     @Persisted
-    public final Config<CommandType> commandType6 = new Config<>(CommandType.EXECUTE);
+    private final Config<CommandType> commandType6 = new Config<>(CommandType.EXECUTE);
 
     @RegisterKeyBind
     private final KeyBind executeKeybind1 = new KeyBind(
@@ -99,7 +98,7 @@ public class CustomCommandKeybindsFeature extends Feature {
     private void executeKeybind(String keybindCommand, CommandType commandType) {
         switch (commandType) {
             case EXECUTE -> Handlers.Command.sendCommandImmediately(keybindCommand);
-            case SUGGEST -> McUtils.mc().setScreen(new ChatScreen(keybindCommand));
+            case SUGGEST -> McUtils.openChatScreen(keybindCommand);
         }
     }
 

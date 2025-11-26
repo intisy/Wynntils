@@ -1,5 +1,5 @@
 /*
- * Copyright © Wynntils 2023-2024.
+ * Copyright © Wynntils 2023-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.core.persisted.storage;
@@ -52,8 +52,9 @@ public final class StorageManager extends Manager {
     public StorageManager() {
         super(List.of());
 
-        userStorageFile = new File(
-                STORAGE_DIR, UndashedUuid.toString(McUtils.mc().getUser().getProfileId()) + FILE_SUFFIX);
+        userStorageFile = new File(STORAGE_DIR, UndashedUuid.toString(McUtils.getUserProfileUUID()) + FILE_SUFFIX);
+
+        addShutdownHook();
     }
 
     public void initComponents() {
@@ -99,6 +100,10 @@ public final class StorageManager extends Manager {
         }
     }
 
+    private void addShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(this::writeToJson));
+    }
+
     @SubscribeEvent
     public void onWynncraftDisconnect(WynncraftConnectionEvent.Disconnected event) {
         // Always save when disconnecting
@@ -132,15 +137,23 @@ public final class StorageManager extends Manager {
         if (Managers.Upfixer.runUpfixers(storageObject, workaround, UpfixerType.STORAGE)) {
             Managers.Json.savePreciousJson(userStorageFile, storageObject);
 
-            // Re-read the storage file after upfixing
-            readFromJson();
+            // No need to re-read the storage file after upfixing, as we're about to read it anyway
         }
     }
 
     private void readFromJson() {
         storageObject = Managers.Json.loadPreciousJson(userStorageFile);
         storages.forEach((jsonName, storage) -> {
-            if (!storageObject.has(jsonName)) return;
+            if (!storageObject.has(jsonName)) {
+                // Even though the storage is not present in the file,
+                // we still need to call onStorageLoad, otherwise
+                // it'll create the weird behavior of onStorageLoaded
+                // only being called when the storage is present in the file
+                // (so after the 2nd launch of the mod, with the storage present)
+                Storageable owner = storageOwner.get(storage);
+                owner.onStorageLoad(storage);
+                return;
+            }
 
             // read value and update option
             JsonElement jsonElem = storageObject.get(jsonName);
@@ -148,11 +161,11 @@ public final class StorageManager extends Manager {
             Managers.Persisted.setRaw(storage, value);
 
             Storageable owner = storageOwner.get(storage);
-            owner.onStorageLoad();
+            owner.onStorageLoad(storage);
         });
     }
 
-    private void writeToJson() {
+    private synchronized void writeToJson() {
         JsonObject storageJson = new JsonObject();
 
         // Save upfixers

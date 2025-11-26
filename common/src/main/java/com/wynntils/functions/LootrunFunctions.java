@@ -1,14 +1,15 @@
 /*
- * Copyright © Wynntils 2022-2024.
+ * Copyright © Wynntils 2022-2025.
  * This file is released under LGPLv3. See LICENSE for full license details.
  */
 package com.wynntils.functions;
 
 import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.functions.Function;
+import com.wynntils.core.consumers.functions.arguments.Argument;
 import com.wynntils.core.consumers.functions.arguments.FunctionArguments;
-import com.wynntils.models.beacons.type.LootrunBeaconKind;
 import com.wynntils.models.containers.type.MythicFind;
+import com.wynntils.models.lootrun.beacons.LootrunBeaconKind;
 import com.wynntils.models.lootrun.type.TaskLocation;
 import com.wynntils.utils.EnumUtils;
 import com.wynntils.utils.mc.type.Location;
@@ -117,8 +118,7 @@ public class LootrunFunctions {
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
-            return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("color", String.class, null)));
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("color", String.class, null)));
         }
     }
 
@@ -134,8 +134,21 @@ public class LootrunFunctions {
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
             return new FunctionArguments.RequiredArgumentBuilder(List.of(
-                    new FunctionArguments.Argument<>("index", Integer.class, null),
-                    new FunctionArguments.Argument<>("colored", Boolean.class, null)));
+                    new Argument<>("index", Integer.class, null), new Argument<>("colored", Boolean.class, null)));
+        }
+    }
+
+    public static class LootrunTrialFunction extends Function<String> {
+        @Override
+        public String getValue(FunctionArguments arguments) {
+            int trialIndex = arguments.getArgument("index").getIntegerValue();
+
+            return Models.Lootrun.getTrial(trialIndex);
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("index", Integer.class, null)));
         }
     }
 
@@ -155,8 +168,7 @@ public class LootrunFunctions {
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
-            return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("color", String.class, null)));
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("color", String.class, null)));
         }
     }
 
@@ -176,8 +188,7 @@ public class LootrunFunctions {
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
-            return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("color", String.class, null)));
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("color", String.class, null)));
         }
     }
 
@@ -197,8 +208,24 @@ public class LootrunFunctions {
 
         @Override
         public FunctionArguments.Builder getArgumentsBuilder() {
-            return new FunctionArguments.RequiredArgumentBuilder(
-                    List.of(new FunctionArguments.Argument<>("color", String.class, null)));
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("color", String.class, null)));
+        }
+    }
+
+    public static class LootrunBeaconVibrantFunction extends Function<Boolean> {
+        @Override
+        public Boolean getValue(FunctionArguments arguments) {
+            String color = arguments.getArgument("color").getStringValue();
+
+            LootrunBeaconKind lootrunBeaconKind = LootrunBeaconKind.fromName(color);
+            if (lootrunBeaconKind == null) return false;
+
+            return Models.Lootrun.isBeaconVibrant(lootrunBeaconKind);
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.RequiredArgumentBuilder(List.of(new Argument<>("color", String.class, null)));
         }
     }
 
@@ -226,10 +253,73 @@ public class LootrunFunctions {
         }
     }
 
+    public static class LootrunLastSelectedBeaconVibrantFunction extends Function<Boolean> {
+        @Override
+        public Boolean getValue(FunctionArguments arguments) {
+            return Models.Lootrun.wasLastBeaconVibrant();
+        }
+    }
+
     public static class LootrunRedBeaconChallengeCountFunction extends Function<Integer> {
         @Override
         public Integer getValue(FunctionArguments arguments) {
             return Models.Lootrun.getRedBeaconTaskCount();
+        }
+    }
+
+    public static class LootrunOrangeBeaconCountFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            return Models.Lootrun.getActiveOrangeBeacons();
+        }
+    }
+
+    public static class LootrunNextOrangeExpireFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            return Models.Lootrun.getChallengesTillNextOrangeExpires();
+        }
+    }
+
+    public static class LootrunRainbowBeaconCountFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            return Models.Lootrun.getActiveRainbowBeacons();
+        }
+    }
+
+    public static class LootrunSacrificesFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            return Models.Lootrun.getSacrifices();
+        }
+    }
+
+    public static class LootrunRerollsFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            return Models.Lootrun.getRerolls();
+        }
+    }
+
+    public static class ChestsOpenedThisSessionFunction extends Function<Integer> {
+        @Override
+        public Integer getValue(FunctionArguments arguments) {
+            int tier = arguments.getArgument("tier").getIntegerValue();
+            boolean exact = arguments.getArgument("exact").getBooleanValue();
+
+            return Models.LootChest.getLootChestOpenedThisSession(tier, exact);
+        }
+
+        @Override
+        public FunctionArguments.Builder getArgumentsBuilder() {
+            return new FunctionArguments.OptionalArgumentBuilder(
+                    List.of(new Argument<>("tier", Integer.class, 1), new Argument<>("exact", Boolean.class, false)));
+        }
+
+        @Override
+        protected List<String> getAliases() {
+            return List.of("session_chests");
         }
     }
 }
