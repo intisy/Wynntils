@@ -50,8 +50,8 @@ import com.wynntils.features.commands.AddCommandExpansionFeature;
 import com.wynntils.features.commands.CommandAliasesFeature;
 import com.wynntils.features.commands.CustomCommandKeybindsFeature;
 import com.wynntils.features.commands.FilterAdminCommandsFeature;
-import com.wynntils.features.custom.AutoCastFeature;
-import com.wynntils.features.custom.AutoWalkFeature;
+import com.wynntils.features.custom.AutoRandomCastFeature;
+import com.wynntils.features.custom.AutoWalkToTotemFeature;
 import com.wynntils.features.debug.AbilityTreeDataDumpFeature;
 import com.wynntils.features.debug.ContentBookDumpFeature;
 import com.wynntils.features.debug.FunctionDumpFeature;
@@ -412,8 +412,8 @@ public final class FeatureManager extends Manager {
         registerFeature(new ExtendedSeasonLeaderboardFeature());
         registerFeature(new TerritoryDefenseMessageFeature());
         registerFeature(new ValuableFoundFeature());
-        registerFeature(new AutoWalkFeature());
-        registerFeature(new AutoCastFeature());
+        registerFeature(new AutoWalkToTotemFeature());
+        registerFeature(new AutoRandomCastFeature());
         // endregion
 
         // Reload Minecraft's config files so our own keybinds get loaded

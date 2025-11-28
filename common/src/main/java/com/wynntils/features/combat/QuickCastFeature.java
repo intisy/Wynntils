@@ -109,15 +109,15 @@ public class QuickCastFeature extends Feature {
         tryCastSpell(SpellUnit.PRIMARY, SpellUnit.SECONDARY, SpellUnit.PRIMARY);
     }
 
-    private void castSecondSpell() {
+    public void castSecondSpell() {
         tryCastSpell(SpellUnit.PRIMARY, SpellUnit.PRIMARY, SpellUnit.PRIMARY);
     }
 
-    private void castThirdSpell() {
+    public void castThirdSpell() {
         tryCastSpell(SpellUnit.PRIMARY, SpellUnit.SECONDARY, SpellUnit.SECONDARY);
     }
 
-    private void castFourthSpell() {
+    public void castFourthSpell() {
         tryCastSpell(SpellUnit.PRIMARY, SpellUnit.PRIMARY, SpellUnit.SECONDARY);
     }
 

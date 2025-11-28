@@ -8,6 +8,8 @@ import com.wynntils.core.persisted.config.Category;
 import com.wynntils.core.persisted.config.ConfigCategory;
 import com.wynntils.mc.event.TickEvent;
 import com.wynntils.models.abilities.type.ShamanTotem;
+import com.wynntils.models.bonustotems.BonusTotem;
+import com.wynntils.models.bonustotems.type.BonusTotemType;
 import com.wynntils.utils.mc.McUtils;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -21,14 +23,14 @@ import org.lwjgl.glfw.GLFW;
 import java.util.List;
 
 @ConfigCategory(Category.INVENTORY)
-public class AutoWalkFeature extends Feature {
+public class AutoWalkToTotemFeature extends Feature {
     @RegisterKeyBind
     public final KeyBind autoWalkKeyBind =
-            new KeyBind("Auto Walk Towards Mob Totem", GLFW.GLFW_KEY_F9, true, this::action);
+            new KeyBind("Auto Walk Towards Nearest Totem", GLFW.GLFW_KEY_F9, true, this::action);
     private final Minecraft client;
     private boolean isWalking = false;
     private Vec3 lastPosition;
-    public AutoWalkFeature() {
+    public AutoWalkToTotemFeature() {
         this.client = Minecraft.getInstance();
     }
 
@@ -86,7 +88,10 @@ public class AutoWalkFeature extends Feature {
         }
     }
     public Vec3 getCenter() {
-        List<ShamanTotem> totems = Models.ShamanTotem.getActiveTotems();
+        List<Position> totems = Models.BonusTotem.getBonusTotemsByType(BonusTotemType.MOB).stream().map(BonusTotem::getPosition).toList();
+        if (totems.isEmpty()) {
+            totems = Models.ShamanTotem.getActiveTotems().stream().map(ShamanTotem::getPosition).toList();
+        }
         if (totems.isEmpty()) {
             return lastPosition;
         }
@@ -95,10 +100,10 @@ public class AutoWalkFeature extends Feature {
         double sumY = 0;
         double sumZ = 0;
 
-        for (ShamanTotem totem : totems) {
-            sumX += totem.getPosition().x();
-            sumY += totem.getPosition().y();
-            sumZ += totem.getPosition().z();
+        for (Position totem : totems) {
+            sumX += totem.x();
+            sumY += totem.y();
+            sumZ += totem.z();
         }
 
         double centerX = sumX / totems.size();
@@ -116,7 +121,7 @@ public class AutoWalkFeature extends Feature {
                 isWalking = true;
                 startWalking();
             } else
-                McUtils.sendMessageToClient(Component.literal("No mob totems found"));
+                McUtils.sendMessageToClient(Component.literal("No totems found"));
         } else {
             McUtils.sendMessageToClient(Component.literal("Disable auto walk"));
             stopWalking();

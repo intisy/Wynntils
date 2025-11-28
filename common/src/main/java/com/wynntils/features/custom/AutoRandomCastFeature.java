@@ -16,12 +16,13 @@ import net.neoforged.bus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.Optional;
+import java.util.Random;
 
 @ConfigCategory(Category.INVENTORY)
-public class AutoCastFeature extends Feature {
+public class AutoRandomCastFeature extends Feature {
     @RegisterKeyBind
     public final KeyBind autoCastKeyBind =
-            new KeyBind("Auto Cast The First Spell", GLFW.GLFW_KEY_F8, true, this::action);
+            new KeyBind("Auto Cast Random Spell", GLFW.GLFW_KEY_F8, true, this::action);
     private boolean isActive = false;
     private static final int delayInTicks = 20;
     private int current;
@@ -33,7 +34,16 @@ public class AutoCastFeature extends Feature {
             if (current == 0) {
                 current = delayInTicks;
                 Optional<Feature> feature = Managers.Feature.getFeatureFromString("QuickCast");
-                feature.ifPresent(value -> ((QuickCastFeature) (value)).castFirstSpell());
+                feature.ifPresent(value -> {
+                    QuickCastFeature quickCastFeature = (QuickCastFeature) (value);
+                    switch (new Random().nextInt(4)) {
+                        case 0 -> quickCastFeature.castFirstSpell();
+                        case 1 -> quickCastFeature.castSecondSpell();
+                        case 2 -> quickCastFeature.castThirdSpell();
+                        case 3 -> quickCastFeature.castFourthSpell();
+                        default -> McUtils.sendMessageToClient(Component.literal("Something went wrong"));
+                    }
+                });
             }
         }
     }
