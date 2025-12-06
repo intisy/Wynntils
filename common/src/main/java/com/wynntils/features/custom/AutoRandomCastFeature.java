@@ -18,11 +18,11 @@ import org.lwjgl.glfw.GLFW;
 import java.util.Optional;
 import java.util.Random;
 
-@ConfigCategory(Category.INVENTORY)
+@ConfigCategory(Category.MACRO)
 public class AutoRandomCastFeature extends Feature {
     @RegisterKeyBind
     public final KeyBind autoCastKeyBind =
-            new KeyBind("Auto Cast Random Spell", GLFW.GLFW_KEY_F8, true, this::action);
+            new KeyBind("Auto Cast Random Spell", GLFW.GLFW_KEY_UNKNOWN, true, this::action);
     private boolean isActive = false;
     private static final int delayInTicks = 20;
     private int current;
@@ -41,7 +41,6 @@ public class AutoRandomCastFeature extends Feature {
                         case 1 -> quickCastFeature.castSecondSpell();
                         case 2 -> quickCastFeature.castThirdSpell();
                         case 3 -> quickCastFeature.castFourthSpell();
-                        default -> McUtils.sendMessageToClient(Component.literal("Something went wrong"));
                     }
                 });
             }

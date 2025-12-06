@@ -22,11 +22,11 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
-@ConfigCategory(Category.INVENTORY)
+@ConfigCategory(Category.MACRO)
 public class AutoWalkToTotemFeature extends Feature {
     @RegisterKeyBind
     public final KeyBind autoWalkKeyBind =
-            new KeyBind("Auto Walk Towards Nearest Totem", GLFW.GLFW_KEY_F9, true, this::action);
+            new KeyBind("Auto Walk Towards Nearest Totem", GLFW.GLFW_KEY_UNKNOWN, true, this::action);
     private final Minecraft client;
     private boolean isWalking = false;
     private Vec3 lastPosition;
@@ -90,10 +90,11 @@ public class AutoWalkToTotemFeature extends Feature {
     public Vec3 getCenter() {
         List<Position> totems = Models.BonusTotem.getBonusTotemsByType(BonusTotemType.MOB).stream().map(BonusTotem::getPosition).toList();
         if (totems.isEmpty()) {
-            totems = Models.ShamanTotem.getActiveTotems().stream().map(ShamanTotem::getPosition).toList();
-        }
-        if (totems.isEmpty()) {
-            return lastPosition;
+            if (!Models.ShamanTotem.getActiveTotems().isEmpty()) {
+                totems = Models.ShamanTotem.getActiveTotems().stream().map(ShamanTotem::getPosition).toList();
+            } else {
+                return lastPosition;
+            }
         }
 
         double sumX = 0;

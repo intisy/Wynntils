@@ -24,7 +24,8 @@ public enum Category {
     TRADEMARKET(Texture.TRADE_MARKET_CONFIG_ICON),
     UI(Texture.UI_CONFIG_ICON),
     UTILITIES(Texture.UTILITIES_CONFIG_ICON),
-    WYNNTILS(Texture.WYNNTILS_CONFIG_ICON);
+    WYNNTILS(Texture.WYNNTILS_CONFIG_ICON),
+    MACRO(Texture.COMBAT_CONFIG_ICON);
 
     private final Texture categoryIcon;
 
