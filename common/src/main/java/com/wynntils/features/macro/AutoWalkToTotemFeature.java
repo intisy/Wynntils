@@ -1,4 +1,4 @@
-package com.wynntils.features.custom;
+package com.wynntils.features.macro;
 
 import com.wynntils.core.components.Models;
 import com.wynntils.core.consumers.features.Feature;
