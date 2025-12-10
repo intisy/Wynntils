@@ -50,6 +50,7 @@ import com.wynntils.features.commands.AddCommandExpansionFeature;
 import com.wynntils.features.commands.CommandAliasesFeature;
 import com.wynntils.features.commands.CustomCommandKeybindsFeature;
 import com.wynntils.features.commands.FilterAdminCommandsFeature;
+import com.wynntils.features.macro.AutoGrindSpotFeature;
 import com.wynntils.features.macro.AutoRandomCastFeature;
 import com.wynntils.features.macro.AutoWalkToTotemFeature;
 import com.wynntils.features.debug.AbilityTreeDataDumpFeature;
@@ -81,7 +82,7 @@ import com.wynntils.features.inventory.ItemTextOverlayFeature;
 import com.wynntils.features.inventory.LootchestTextFeature;
 import com.wynntils.features.inventory.PersonalStorageUtilitiesFeature;
 import com.wynntils.features.inventory.UnidentifiedItemIconFeature;
-import com.wynntils.features.macro.BaritoneMultiGatherFeature;
+import com.wynntils.features.macro.AutoGatherFeature;
 import com.wynntils.features.map.BeaconBeamFeature;
 import com.wynntils.features.map.GuildMapFeature;
 import com.wynntils.features.map.MainMapFeature;
@@ -418,7 +419,8 @@ public final class FeatureManager extends Manager {
         // region macro
         registerFeature(new AutoWalkToTotemFeature());
         registerFeature(new AutoRandomCastFeature());
-        registerFeature(new BaritoneMultiGatherFeature());
+        registerFeature(new AutoGrindSpotFeature());
+        registerFeature(new AutoGatherFeature());
         // endregion
 
         // Reload Minecraft's config files so our own keybinds get loaded

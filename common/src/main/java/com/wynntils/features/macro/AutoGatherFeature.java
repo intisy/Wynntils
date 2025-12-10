@@ -30,7 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @ConfigCategory(Category.MACRO)
-public class BaritoneMultiGatherFeature extends Feature {
+public class AutoGatherFeature extends Feature {
     private enum Mode { MINING, WOODCUTTING, FARMING, FISHING }
 
     private static final Map<Mode, List<BlockPos>> POINTS = Map.of(
@@ -93,7 +93,7 @@ public class BaritoneMultiGatherFeature extends Feature {
     private BlockPos currentTarget = null;
     private boolean releaseAttack = false;
 
-    public BaritoneMultiGatherFeature() {
+    public AutoGatherFeature() {
         this.client = Minecraft.getInstance();
         for (Mode m : Mode.values()) {
             cooldowns.put(m, new HashMap<>());

@@ -12,6 +12,7 @@ architectury {
 // By default, this is C:\Users\<your username>\.gradle\gradle.properties on Windows
 // or ~/.gradle/gradle.properties on Linux/MacOS.
 def usingHotswapAgent = project.hasProperty("wynntils.hotswap") ? project.getProperty("wynntils.hotswap") == "true" : false
+def clientCount = 3
 
 // On the release branches, this string will be automatically updated by the bots
 // Do not change this in the main branch!
@@ -27,23 +28,32 @@ subprojects {
 
     loom {
         silentMojangMappingsLicense()
-
         accessWidenerPath = file("src/main/resources/wynntils.accessWidener")
 
         runs {
-            client {
-                property("devauth.configDir", getRootProject().file(".devauth").absolutePath)
-                if (usingHotswapAgent) {
-                    vmArgs "-XX:+AllowEnhancedClassRedefinition"
-                    // https://youtrack.jetbrains.com/issue/JBR-7351/JVM-CodeCache-will-not-be-cleaned-using-G1GC-if-Hotswap-Agent-is-enabled-since-JBR-6419-jbr21.351
-                    vmArgs "-XX:+ClassUnloading"
-                    vmArgs "-XX:HotswapAgent=fatjar"
+            for (int i = 1; i <= clientCount; i++) {
+                create("client${i}") {
+                    property("devauth.configDir", rootProject.file(".devauth").absolutePath)
+
+                    if (usingHotswapAgent) {
+                        vmArgs "-XX:+AllowEnhancedClassRedefinition"
+                        vmArgs "-XX:+ClassUnloading"
+                        vmArgs "-XX:HotswapAgent=fatjar"
+                    }
+
+                    vmArgs "-ea"
+                    client()
                 }
-                vmArgs "-ea" // run dev builds with asserts
-                client()
             }
         }
     }
+
+    tasks.register("runAllClients") {
+        group = "loom"
+        description = "Runs all client instances sequentially"
+        dependsOn tasks.matching { it.name.startsWith("client") }
+    }
+
 
     dependencies {
         minecraft "com.mojang:minecraft:${minecraft_version}"
