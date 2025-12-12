@@ -18,7 +18,10 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
@@ -42,15 +45,22 @@ public class AutoGrindSpotFeature extends Feature {
     private Phase currentPhase = Phase.IDLE;
 
     private long nextAttackTime = 0;
-    private static final int MIN_CPS = 2;
-    private static final int MAX_CPS = 6;
     private final Random random = new Random();
     private boolean releaseAttack = false;
+    private Entity currentAttackTarget = null;
 
+    private long nextDefensiveSpellTime = 0;
     private long nextSpell1Time = 0;
     private long nextSpell3Time = 0;
-    private static final long SPELL_1_COOLDOWN_MS = 5000;
-    private static final long SPELL_3_COOLDOWN_MS = 8000;
+
+    private static final int MIN_CPS = 2;
+    private static final int MAX_CPS = 6;
+    private static final double SPOT_RADIUS = 50;
+    private static final double ARIVE_RADIUS = 25;
+    private static final double REACH = 3;
+    private static final long DEFENSIVE_SPELL_COOLDOWN_MS = 2000;
+    private static final long SPELL_1_COOLDOWN_MS = 8000;
+    private static final long SPELL_3_COOLDOWN_MS = 4000;
     private static final List<SpellDirection> SPELL_1 = List.of(SpellDirection.RIGHT, SpellDirection.LEFT, SpellDirection.RIGHT);
     private static final List<SpellDirection> SPELL_3 = List.of(SpellDirection.RIGHT, SpellDirection.LEFT, SpellDirection.LEFT);
 
@@ -64,7 +74,7 @@ public class AutoGrindSpotFeature extends Feature {
         this.client = Minecraft.getInstance();
     }
 
-    public void toggleActive() {
+    private void toggleActive() {
         if (isActive) {
             disable();
         } else {
@@ -108,16 +118,20 @@ public class AutoGrindSpotFeature extends Feature {
             return;
         }
 
-        Entity nearbyMonster = findNearestHostileInRadius(5);
-        if (nearbyMonster != null) {
+        Entity nearbyMonster = findNearestHostileInReach();
+        if (nearbyMonster != null && hasLineOfSight(nearbyMonster)) {
             smoothLookAt(nearbyMonster);
-            if (Models.Spell.isSpellQueueEmpty()) {
+            long now = System.currentTimeMillis();
+
+            if (now >= nextDefensiveSpellTime && Models.Spell.isSpellQueueEmpty()) {
+                Models.Spell.addSpellToQueue(SPELL_1);
+                nextDefensiveSpellTime = now + DEFENSIVE_SPELL_COOLDOWN_MS;
                 Models.Spell.addSpellToQueue(SPELL_1);
             }
         }
 
         double distSq = client.player.blockPosition().distSqr(currentGrindTarget);
-        if (distSq < 10 * 10) {
+        if (distSq < ARIVE_RADIUS * ARIVE_RADIUS) {
             currentPhase = Phase.FARMING;
             stopBaritone();
             McUtils.sendMessageToClient(Component.literal("Arrived at Grind Spot. Starting to farm."));
@@ -135,7 +149,7 @@ public class AutoGrindSpotFeature extends Feature {
         }
 
         double distFromCenter = client.player.blockPosition().distSqr(currentGrindTarget);
-        if (distFromCenter > 50 * 50) {
+        if (distFromCenter > SPOT_RADIUS * SPOT_RADIUS) {
             McUtils.sendMessageToClient(Component.literal("Too far from grind spot, returning..."));
             currentPhase = Phase.NAVIGATING;
             return;
@@ -145,26 +159,33 @@ public class AutoGrindSpotFeature extends Feature {
         if (target != null) {
             double distToMob = client.player.distanceToSqr(target);
 
-            if (distToMob > 4 * 4) {
+            if (distToMob > REACH * REACH || !hasLineOfSight(target)) {
+                currentAttackTarget = null;
                 if (!isBaritoneActive()) {
                     moveToLocation(target.blockPosition());
                 }
             } else {
                 stopBaritone();
+                currentAttackTarget = target;
                 smoothLookAt(target);
                 attack();
                 castSpellsIfReady();
             }
+        } else {
+            currentAttackTarget = null;
         }
     }
 
     private void castSpellsIfReady() {
         long now = System.currentTimeMillis();
 
-        if (now >= nextSpell1Time && Models.Spell.isSpellQueueEmpty()) {
+        if (!Models.Spell.isSpellQueueEmpty())
+            return;
+
+        if (nextSpell1Time < nextSpell3Time && now >= nextSpell1Time) {
             Models.Spell.addSpellToQueue(SPELL_1);
             nextSpell1Time = now + SPELL_1_COOLDOWN_MS;
-        } else if (now >= nextSpell3Time && Models.Spell.isSpellQueueEmpty()) {
+        } else if (now >= nextSpell3Time) {
             Models.Spell.addSpellToQueue(SPELL_3);
             nextSpell3Time = now + SPELL_3_COOLDOWN_MS;
         }
@@ -175,8 +196,8 @@ public class AutoGrindSpotFeature extends Feature {
 
         List<Display.TextDisplay> textDisplays = client.level.getEntitiesOfClass(
                 Display.TextDisplay.class,
-                client.player.getBoundingBox().inflate(50),
-                td -> isHostileNameTag(td)
+                client.player.getBoundingBox().inflate(SPOT_RADIUS),
+                this::isHostileNameTag
         );
 
         Entity nearestMob = null;
@@ -196,13 +217,13 @@ public class AutoGrindSpotFeature extends Feature {
         return nearestMob;
     }
 
-    private Entity findNearestHostileInRadius(double radius) {
+    private Entity findNearestHostileInReach() {
         if (client.level == null) return null;
 
         List<Display.TextDisplay> textDisplays = client.level.getEntitiesOfClass(
                 Display.TextDisplay.class,
-                client.player.getBoundingBox().inflate(radius),
-                td -> isHostileNameTag(td)
+                client.player.getBoundingBox().inflate(AutoGrindSpotFeature.REACH),
+                this::isHostileNameTag
         );
 
         Entity nearestMob = null;
@@ -212,7 +233,7 @@ public class AutoGrindSpotFeature extends Feature {
             Entity mob = findMobNearNameTag(nameTag);
             if (mob != null && mob.isAlive()) {
                 double dist = client.player.distanceToSqr(mob);
-                if (dist < nearestDist && dist <= radius * radius) {
+                if (dist < nearestDist && dist <= AutoGrindSpotFeature.REACH * AutoGrindSpotFeature.REACH) {
                     nearestDist = dist;
                     nearestMob = mob;
                 }
@@ -231,6 +252,25 @@ public class AutoGrindSpotFeature extends Feature {
         String raw = styled.getString();
 
         return raw.contains("§c") || raw.contains("§e") || str.contains("§c") || str.contains("§e");
+    }
+
+    private boolean hasLineOfSight(Entity target) {
+        if (client.level == null || client.player == null) return false;
+
+        Vec3 eyePos = client.player.getEyePosition();
+        Vec3 targetPos = target.getEyePosition();
+
+        ClipContext clipContext = new ClipContext(
+                eyePos,
+                targetPos,
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE,
+                client.player
+        );
+
+        BlockHitResult result = client.level.clip(clipContext);
+        return result.getType() == HitResult.Type.MISS ||
+                result.getBlockPos().equals(target.blockPosition());
     }
 
     private Entity findMobNearNameTag(Display.TextDisplay nameTag) {
@@ -311,10 +351,35 @@ public class AutoGrindSpotFeature extends Feature {
             Object rotation = rotationClass.getConstructor(float.class, float.class).newInstance(yaw, pitch);
 
             Method updateTarget = lookBehavior.getClass().getMethod("updateTarget", rotationClass, boolean.class);
-            updateTarget.invoke(lookBehavior, rotation, true);
+            updateTarget.invoke(lookBehavior, rotation, false);
         } catch (Exception e) {
-            client.player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, target.getEyePosition());
+            smoothLookAtManual(target);
         }
+    }
+
+    private void smoothLookAtManual(Entity target) {
+        Vec3 eyePos = client.player.getEyePosition();
+        Vec3 targetPos = target.getEyePosition();
+        double dx = targetPos.x - eyePos.x;
+        double dy = targetPos.y - eyePos.y;
+        double dz = targetPos.z - eyePos.z;
+        double dist = Math.sqrt(dx * dx + dz * dz);
+        float targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float targetPitch = (float) Math.toDegrees(-Math.atan2(dy, dist));
+
+        float currentYaw = client.player.getYRot();
+        float currentPitch = client.player.getXRot();
+
+        float yawDiff = targetYaw - currentYaw;
+        while (yawDiff > 180) yawDiff -= 360;
+        while (yawDiff < -180) yawDiff += 360;
+
+        float smoothFactor = 0.3f;
+        float newYaw = currentYaw + yawDiff * smoothFactor;
+        float newPitch = currentPitch + (targetPitch - currentPitch) * smoothFactor;
+
+        client.player.setYRot(newYaw);
+        client.player.setXRot(newPitch);
     }
 
     private void configureSmoothLook(boolean enabled) {

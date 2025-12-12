@@ -31,9 +31,20 @@ subprojects {
         accessWidenerPath = file("src/main/resources/wynntils.accessWidener")
 
         runs {
+            client {
+                property("devauth.configDir", getRootProject().file(".devauth").absolutePath)
+                if (usingHotswapAgent) {
+                    vmArgs "-XX:+AllowEnhancedClassRedefinition"
+                    vmArgs "-XX:+ClassUnloading"
+                    vmArgs "-XX:HotswapAgent=fatjar"
+                }
+                vmArgs "-ea"
+                client()
+            }
+
             for (int i = 1; i <= clientCount; i++) {
                 create("client${i}") {
-                    property("devauth.configDir", rootProject.file(".devauth").absolutePath)
+                    property("devauth.configDir", project.rootProject.file(".devauth").absolutePath)
 
                     if (usingHotswapAgent) {
                         vmArgs "-XX:+AllowEnhancedClassRedefinition"
@@ -50,10 +61,32 @@ subprojects {
 
     tasks.register("runAllClients") {
         group = "loom"
-        description = "Runs all client instances sequentially"
-        dependsOn tasks.matching { it.name.startsWith("client") }
-    }
+        description = "Runs all client configurations in parallel"
 
+        doLast {
+            def projectDir = project.rootDir
+            def projectName = project.name
+            def count = clientCount
+            def javaHome = System.getProperty("java.home")
+            println "Starting ${count} clients in parallel using JAVA_HOME=${javaHome}..."
+            def processes = []
+            for (int i = 1; i <= count; i++) {
+                println "Launching :${projectName}:runClient${i}"
+                def pb = new ProcessBuilder('./gradlew', ":${projectName}:runClient${i}")
+                pb.directory(projectDir)
+                pb.environment().put("JAVA_HOME", javaHome)
+                pb.inheritIO()
+                def process = pb.start()
+                processes << [process: process, num: i]
+            }
+            println "All clients launched, waiting for them to exit..."
+            processes.each { 
+                it.process.waitFor()
+                println "Client ${it.num} exited with code: ${it.process.exitValue()}"
+            }
+            println "All clients exited."
+        }
+    }
 
     dependencies {
         minecraft "com.mojang:minecraft:${minecraft_version}"
