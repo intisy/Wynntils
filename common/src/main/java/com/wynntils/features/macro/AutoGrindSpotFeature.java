@@ -10,6 +10,8 @@ import com.wynntils.core.text.StyledText;
 import com.wynntils.mc.event.TickEvent;
 import com.wynntils.models.spells.type.SpellDirection;
 import com.wynntils.utils.mc.McUtils;
+import com.wynntils.utils.mc.LoreUtils;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -52,6 +54,7 @@ public class AutoGrindSpotFeature extends Feature {
     private long nextDefensiveSpellTime = 0;
     private long nextSpell1Time = 0;
     private long nextSpell3Time = 0;
+    private long nextGlobalSpellTime = 0;
 
     private static final int MIN_CPS = 2;
     private static final int MAX_CPS = 6;
@@ -63,6 +66,7 @@ public class AutoGrindSpotFeature extends Feature {
     private static final long SPELL_3_COOLDOWN_MS = 4000;
     private static final List<SpellDirection> SPELL_1 = List.of(SpellDirection.RIGHT, SpellDirection.LEFT, SpellDirection.RIGHT);
     private static final List<SpellDirection> SPELL_3 = List.of(SpellDirection.RIGHT, SpellDirection.LEFT, SpellDirection.LEFT);
+    private static final long GLOBAL_SPELL_COOLDOWN_MS = 1000;
 
     private enum Phase {
         IDLE,
@@ -123,10 +127,20 @@ public class AutoGrindSpotFeature extends Feature {
             smoothLookAt(nearbyMonster);
             long now = System.currentTimeMillis();
 
-            if (now >= nextDefensiveSpellTime && Models.Spell.isSpellQueueEmpty()) {
-                Models.Spell.addSpellToQueue(SPELL_1);
-                nextDefensiveSpellTime = now + DEFENSIVE_SPELL_COOLDOWN_MS;
-                Models.Spell.addSpellToQueue(SPELL_1);
+            if (now >= nextDefensiveSpellTime && now >= nextGlobalSpellTime && Models.Spell.isSpellQueueEmpty()) {
+                boolean isShaman = isShaman();
+                if (isShaman) {
+                     smoothLookAtFloor(nearbyMonster);
+                     if (client.player.getXRot() > 85) {
+                         Models.Spell.addSpellToQueue(SPELL_1);
+                         nextDefensiveSpellTime = now + DEFENSIVE_SPELL_COOLDOWN_MS;
+                         nextGlobalSpellTime = now + GLOBAL_SPELL_COOLDOWN_MS;
+                     }
+                } else {
+                    Models.Spell.addSpellToQueue(SPELL_1);
+                    nextDefensiveSpellTime = now + DEFENSIVE_SPELL_COOLDOWN_MS;
+                    nextGlobalSpellTime = now + GLOBAL_SPELL_COOLDOWN_MS;
+                }
             }
         }
 
@@ -167,9 +181,21 @@ public class AutoGrindSpotFeature extends Feature {
             } else {
                 stopBaritone();
                 currentAttackTarget = target;
-                smoothLookAt(target);
+
+                boolean preparingShamanSpell1 = false;
+                if (isShaman() && shouldCastSpell1Now()) {
+                    smoothLookAtFloor(target);
+                    if (client.player.getXRot() < 85) {
+                         preparingShamanSpell1 = true;
+                    }
+                } else {
+                    smoothLookAt(target);
+                }
+                
                 attack();
-                castSpellsIfReady();
+                if (!preparingShamanSpell1) {
+                    castSpellsIfReady();
+                }
             }
         } else {
             currentAttackTarget = null;
@@ -179,15 +205,19 @@ public class AutoGrindSpotFeature extends Feature {
     private void castSpellsIfReady() {
         long now = System.currentTimeMillis();
 
+        if (now < nextGlobalSpellTime) return;
+
         if (!Models.Spell.isSpellQueueEmpty())
             return;
 
         if (nextSpell1Time < nextSpell3Time && now >= nextSpell1Time) {
             Models.Spell.addSpellToQueue(SPELL_1);
             nextSpell1Time = now + SPELL_1_COOLDOWN_MS;
+            nextGlobalSpellTime = now + GLOBAL_SPELL_COOLDOWN_MS;
         } else if (now >= nextSpell3Time) {
             Models.Spell.addSpellToQueue(SPELL_3);
             nextSpell3Time = now + SPELL_3_COOLDOWN_MS;
+            nextGlobalSpellTime = now + GLOBAL_SPELL_COOLDOWN_MS;
         }
     }
 
@@ -443,5 +473,53 @@ public class AutoGrindSpotFeature extends Feature {
             Method cancel = behavior.getClass().getMethod("cancelEverything");
             cancel.invoke(behavior);
         } catch (Exception ignored) {}
+    }
+    private boolean shouldCastSpell1Now() {
+        long now = System.currentTimeMillis();
+        if (now < nextGlobalSpellTime) return false;
+        if (!Models.Spell.isSpellQueueEmpty()) return false;
+        // Priority logic same as castSpellsIfReady: Spell 1 is checked first
+        return nextSpell1Time < nextSpell3Time && now >= nextSpell1Time;
+    }
+
+    private boolean isShaman() {
+        if (client.player == null) return false;
+        ItemStack stack = client.player.getMainHandItem();
+        if (stack.isEmpty()) return false;
+        
+        List<Component> tooltip = LoreUtils.getTooltipLines(stack);
+        for (Component line : tooltip) {
+            String raw = StyledText.fromComponent(line).getString();
+            if (raw.contains("Class Req: Shaman") || raw.contains("Class Req: Skyseer")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void smoothLookAtFloor(Entity target) {
+        Vec3 eyePos = client.player.getEyePosition();
+        Vec3 targetPos = target.getEyePosition();
+        double dx = targetPos.x - eyePos.x;
+        double dz = targetPos.z - eyePos.z;
+        
+        // Calculate Yaw to look at target
+        float targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        // Target Pitch is 90 (Down)
+        float targetPitch = 90.0f;
+
+        float currentYaw = client.player.getYRot();
+        float currentPitch = client.player.getXRot();
+
+        float yawDiff = targetYaw - currentYaw;
+        while (yawDiff > 180) yawDiff -= 360;
+        while (yawDiff < -180) yawDiff += 360;
+
+        float smoothFactor = 0.3f;
+        float newYaw = currentYaw + yawDiff * smoothFactor;
+        float newPitch = currentPitch + (targetPitch - currentPitch) * smoothFactor;
+
+        client.player.setYRot(newYaw);
+        client.player.setXRot(newPitch);
     }
 }

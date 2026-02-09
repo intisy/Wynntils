@@ -12,7 +12,7 @@ architectury {
 // By default, this is C:\Users\<your username>\.gradle\gradle.properties on Windows
 // or ~/.gradle/gradle.properties on Linux/MacOS.
 def usingHotswapAgent = project.hasProperty("wynntils.hotswap") ? project.getProperty("wynntils.hotswap") == "true" : false
-def clientCount = 3
+def clientCount = 4
 
 // On the release branches, this string will be automatically updated by the bots
 // Do not change this in the main branch!
